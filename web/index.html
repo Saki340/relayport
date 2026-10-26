@@ -150,6 +150,7 @@ svg.i { width: 24px; height: 24px; fill: currentColor; flex: none; }
 .drop h2 { font: var(--md-sys-typescale-title-medium); }
 .drop p { font: var(--md-sys-typescale-body-medium); color: var(--md-sys-color-on-surface-variant); }
 .drop .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.drop .note { font: var(--md-sys-typescale-body-small); }
 .drop:hover .badge { border-radius: var(--md-sys-shape-corner-large); }
 .drop.over { background: var(--md-sys-color-primary-container); outline-color: var(--md-sys-color-primary); }
 .drop.over .badge { border-radius: var(--md-sys-shape-corner-full); scale: 1.1; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
@@ -233,8 +234,8 @@ svg.i { width: 24px; height: 24px; fill: currentColor; flex: none; }
       <p>Enter the upload password to send files through this relay.</p>
     </div>
     <label class="field" id="pwfield">
-      <input id="pw" type="password" placeholder=" " autocomplete="current-password" required aria-describedby="lerr">
-      <span class="label">Password</span>
+      <input id="pw" type="password" placeholder=" " autocomplete="current-password" required aria-labelledby="pwlabel" aria-describedby="lerr">
+      <span class="label" id="pwlabel">Password</span>
       <button type="button" class="btn icon-btn" id="pwshow" aria-label="Show password" aria-pressed="false"><svg class="i"><use href="#i-eye"/></svg></button>
       <span class="support" id="lerr"></span>
     </label>
@@ -250,6 +251,7 @@ svg.i { width: 24px; height: 24px; fill: currentColor; flex: none; }
         <button type="button" class="btn tonal" id="pickbtn"><svg class="i"><use href="#i-file"/></svg>Choose files</button>
         <button type="button" class="btn outlined" id="pickdirbtn"><svg class="i"><use href="#i-folder"/></svg>Choose folder</button>
       </div>
+      <p class="note" id="note" role="status" hidden></p>
       <input id="pick" type="file" multiple hidden>
       <input id="pickdir" type="file" webkitdirectory hidden>
     </div>
@@ -327,7 +329,9 @@ async function entriesToFiles(items) {
   return out;
 }
 
-$('drop').onclick = e => { if (!e.target.closest('button')) $('pick').click(); };
+// The hidden inputs live inside the drop card, so their own click events bubble up here too: ignore those,
+// or "Choose folder" would open the file picker as well.
+$('drop').onclick = e => { if (!e.target.closest('button, input')) $('pick').click(); };
 $('pickbtn').onclick = () => $('pick').click();
 $('pickdirbtn').onclick = () => $('pickdir').click();
 $('pick').onchange = e => { enqueue([...e.target.files].map(f => ({ file: f, name: f.name }))); e.target.value = ''; };
@@ -340,8 +344,15 @@ $('drop').ondrop = async e => {
 };
 
 const queue = []; let running = false;
+// The relay refuses names with a path element starting with "." (reserved for partial files), so skip them
+// here instead of showing an error that resuming can never fix.
+const hidden = name => name.split('/').some(p => p.startsWith('.'));
 function enqueue(items) {
+  const skipped = items.filter(it => hidden(it.name)).length;
+  $('note').hidden = !skipped;
+  $('note').textContent = skipped ? `Skipped ${skipped} hidden ${skipped === 1 ? 'file' : 'files'} (names starting with a dot).` : '';
   for (const it of items) {
+    if (hidden(it.name)) continue;
     const key = `${it.name}|${it.file.size}|${it.file.lastModified}`;
     if (local.has(key)) continue;
     local.delete(key + '#err');
