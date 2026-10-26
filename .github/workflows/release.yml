@@ -2,7 +2,7 @@ name: release
 
 # Publishes ghcr.io/<owner>/relayport after the tests pass:
 #   push to main  -> :edge
-#   tag vX.Y.Z    -> :X.Y.Z, :X.Y, :latest
+#   tag vX.Y.Z    -> :X.Y.Z, :X.Y, :latest, plus a GitHub release with standalone binaries
 on:
   push:
     branches: [main]
@@ -22,6 +22,34 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./...
       - run: go test -race -count=1 ./...
+
+  binaries:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: |
+          set -eu
+          v=${GITHUB_REF_NAME#v} c=${GITHUB_SHA::7}
+          mkdir dist
+          for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os=${t%/*} arch=${t#*/} ext=
+            [ "$os" = windows ] && ext=.exe
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
+              -ldflags="-s -w -X main.version=$v -X main.commit=$c" -o "dist/relayport_${v}_${os}_${arch}${ext}" .
+          done
+          (cd dist && sha256sum * > SHA256SUMS)
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
 
   publish:
     needs: test

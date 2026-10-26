@@ -10,9 +10,9 @@ and tells the VPS to delete its copy. Uploads and pulls are resumable, split int
 and run in parallel, so a flaky cross-border link still makes steady progress.
 
 ```
-browser ──HTTPS──▶ relay (VPS) ◀──HTTPS── puller (home / NAS)
- chunked, resumable   staging area         parallel Range requests, sha256 check,
- upload with progress                      then asks the relay to delete the file
+browser ──HTTP(S)──▶ relay (VPS) ◀──HTTP(S)── puller (home / NAS)
+ chunked, resumable    staging area          parallel Range requests, sha256 check,
+ upload with progress                        then asks the relay to delete the file
 ```
 
 - One static Go binary, no dependencies, one port, one Docker image (`scratch`-based).
@@ -22,26 +22,50 @@ browser ──HTTPS──▶ relay (VPS) ◀──HTTPS── puller (home / NAS
   and dropping the same file again resumes where it stopped.
 - Pulls: one file is split into parallel `Range` segments (helps a single huge file, unlike
   per-file parallelism), progress is saved so a restart resumes, and the whole file is verified
-  against a SHA-256 before it is moved into place and the relay copy is deleted.
-- Safety: one upload password (failed logins are rate limited), a separate pull token,
+  against a SHA-256 before it is moved into place and the relay copy is deleted. An existing local
+  file with the same name is never overwritten.
+- Safety: one upload password and a separate pull token (failures rate limited per address),
   a staging quota, automatic cleanup of abandoned uploads, no path traversal, hidden names refused.
 - The pull side only makes outbound connections, so the destination needs no port forwarding.
 - `relayport push` uploads files or folders from a script or terminal, with the same resume as the page.
 
-## Quick start
+## Install
 
-Images for amd64 and arm64 are published as `ghcr.io/saki340/relayport` (`:0.1`, `:latest`, and `:edge`
-for the main branch).
+You need Docker (with Compose) on two machines:
 
-**On the relay host**: download `compose.relay.yaml`, create the secrets next to it, start it.
+- a **relay host** that both sides can reach, typically a VPS with a public IP. A domain is optional;
+- the **destination**, e.g. a NAS. It only needs outbound internet access.
+
+Images for amd64 and arm64: `ghcr.io/saki340/relayport` (`:0.1`, `:latest`, `:edge` for the main branch).
+
+### 1. Relay host
 
 ```sh
-printf 'RELAYPORT_UPLOAD_PASSWORD=%s\nRELAYPORT_PULL_TOKEN=%s\n' "pick-a-password" "$(openssl rand -hex 32)" > .env
+mkdir relayport && cd relayport
+curl -fsSLO https://raw.githubusercontent.com/Saki340/relayport/main/compose.relay.yaml
+printf 'RELAYPORT_UPLOAD_PASSWORD=%s\nRELAYPORT_PULL_TOKEN=%s\n' "$(openssl rand -base64 18)" "$(openssl rand -hex 32)" > .env
 chmod 600 .env
+```
+
+Then choose how browsers reach it.
+
+**A. IP address and port** (no domain needed):
+
+```sh
+echo 'RELAYPORT_PUBLISH=8080' >> .env
 docker compose -f compose.relay.yaml up -d
 ```
 
-Put a TLS reverse proxy in front, e.g. Caddy:
+Allow TCP 8080 in the VPS firewall and in the provider's security group / security list. The address is
+`http://<server-ip>:8080`. This is plain HTTP: the password and the files cross the network unencrypted, and
+browsers skip the per-chunk checksums (the final SHA-256 check on the pull side still catches corruption).
+
+**B. Domain with HTTPS**: start it as is (it listens on `127.0.0.1:8080` only) and point a reverse proxy at
+it. With Caddy, which gets the certificate by itself:
+
+```sh
+docker compose -f compose.relay.yaml up -d
+```
 
 ```
 relay.example.com {
@@ -49,29 +73,84 @@ relay.example.com {
 }
 ```
 
-**At the destination**: download `compose.puller.yaml`, set `RELAYPORT_SERVER`, your `user:` uid:gid and the
-folder to fill, put the same token in a `.env` (`RELAYPORT_PULL_TOKEN=...`), then
-`docker compose -f compose.puller.yaml up -d`.
+The address is `https://relay.example.com`.
 
-Open `https://relay.example.com`, sign in, and drop files.
+Either way, `cat .env` shows the upload password (for the web page) and the pull token (for step 2).
 
-**Updating** either side: `docker compose pull && docker compose up -d`. `docker compose logs` shows the
-running version on the first line. To build the image yourself instead: `docker build -t relayport .`
-(add `--build-arg VERSION=... --build-arg COMMIT=...` to stamp it) and change `image:` accordingly.
-
-### Uploading from the command line
+### 2. Destination
 
 ```sh
-export RELAYPORT_SERVER=https://relay.example.com RELAYPORT_UPLOAD_PASSWORD=...
-relayport push ./photos ./notes.txt            # or with Docker:
+mkdir relayport && cd relayport
+curl -fsSLO https://raw.githubusercontent.com/Saki340/relayport/main/compose.puller.yaml
+cat > .env <<EOF
+RELAYPORT_SERVER=http://203.0.113.5:8080
+RELAYPORT_PULL_TOKEN=change-me
+RELAYPORT_INBOX=$HOME/inbox
+RELAYPORT_UID=$(id -u)
+RELAYPORT_GID=$(id -g)
+EOF
+chmod 600 .env
+```
+
+Edit `.env`: `RELAYPORT_SERVER` is the address from step 1, `RELAYPORT_PULL_TOKEN` the token from the relay's
+`.env` (the puller refuses to start while it still says `change-me`), `RELAYPORT_INBOX` the folder to fill
+(it must exist). Then:
+
+```sh
+docker compose -f compose.puller.yaml up -d
+```
+
+### 3. Check that it works
+
+```sh
+docker compose -f compose.relay.yaml logs     # on the relay
+docker compose -f compose.puller.yaml logs    # on the destination
+```
+
+- The relay log starts with `relayport 0.1.x (...)` and `serving on :8080`.
+- The puller log says `pulling from <your address> into /inbox`. If it says the relay rejected the token, the
+  two `RELAYPORT_PULL_TOKEN` values differ. A connection error or timeout usually means the port is not open in
+  a firewall, or `RELAYPORT_SERVER` is wrong.
+- Open the address in a browser, sign in with the upload password and drop a small file. It shows
+  `waiting for NAS`, then `to NAS: ...`, then disappears from the list; the puller logs `<name>: done in ...`
+  and the file is in your `RELAYPORT_INBOX` folder.
+
+### Updating
+
+Run `docker compose -f compose.<relay|puller>.yaml pull` and then `up -d` with the same file. The first log line
+shows the running version. To build the image yourself instead: `docker build -t relayport .` (add
+`--build-arg VERSION=... --build-arg COMMIT=...` to stamp it) and change `image:` in the compose file.
+
+## Uploading from the command line
+
+Download `relayport_<version>_<os>_<arch>` from the [releases](https://github.com/Saki340/relayport/releases)
+page (Linux, macOS and Windows, amd64 and arm64; `SHA256SUMS` alongside), or use the Docker image.
+
+```sh
+export RELAYPORT_SERVER=http://203.0.113.5:8080 RELAYPORT_UPLOAD_PASSWORD=...
+./relayport push ./photos ./notes.txt
 docker run --rm -e RELAYPORT_SERVER -e RELAYPORT_UPLOAD_PASSWORD -v "$PWD:/w" -w /w \
   ghcr.io/saki340/relayport:0.1 push ./photos
+```
+
+```powershell
+$env:RELAYPORT_SERVER = 'http://203.0.113.5:8080'; $env:RELAYPORT_UPLOAD_PASSWORD = '...'
+.\relayport_0.1.0_windows_amd64.exe push .\photos
 ```
 
 Folders keep their name, hidden files are skipped, `-to some/dir` puts everything under a folder on the relay.
 If the push is interrupted, run the same command again: finished chunks are not sent twice.
 
 ## Configuration
+
+Compose `.env` variables (used by the example compose files):
+
+| Variable | File | Meaning |
+|---|---|---|
+| `RELAYPORT_PUBLISH` | relay | published port, default `127.0.0.1:8080`; `8080` = every interface |
+| `RELAYPORT_SERVER` | puller | relay address, `http://<ip>:<port>` or `https://<domain>` |
+| `RELAYPORT_INBOX` | puller | host folder that receives the files |
+| `RELAYPORT_UID` / `RELAYPORT_GID` | puller | owner of pulled files, default `1000` |
 
 `relayport serve`
 
@@ -83,7 +162,7 @@ If the push is interrupted, run the same command again: finished chunks are not 
 | `RELAYPORT_PULL_TOKEN` | required | bearer token for the puller |
 | `RELAYPORT_QUOTA` | unlimited | max staged + in-flight bytes, e.g. `50GiB` |
 | `RELAYPORT_STALE_TTL` | `48h` | drop unfinished uploads idle this long |
-| `RELAYPORT_TRUST_PROXY` | off | `1` = take client IP from `X-Forwarded-For` (only behind your proxy) |
+| `RELAYPORT_TRUST_PROXY` | off | `1` = take the client IP from `X-Forwarded-For`, only for connections from loopback or private addresses (your proxy) |
 | `RELAYPORT_SECRET` | derived from password | cookie signing key |
 
 `relayport pull`
@@ -106,17 +185,17 @@ If the push is interrupted, run the same command again: finished chunks are not 
 | `RELAYPORT_UPLOAD_PASSWORD` | required | the web page password |
 | `RELAYPORT_PARALLEL` | `4` | chunks in flight per file |
 
-`relayport version` prints the version and commit. The relay and the puller refuse to start while a secret
-still starts with `change-me` (the old example placeholder).
+`relayport version` prints the version and commit. Every command refuses a secret that still starts with
+`change-me`.
 
 ## Notes
 
-- Run the puller container as your own uid:gid (`user:` in `compose.puller.yaml`); as root,
-  pulled files end up owned by root in the destination folder.
-- Plain HTTP works but sends the password and files in clear text; use TLS on the public side.
-- Uploading the same name twice while it is still staged is refused (`409`); the name frees up once the puller has confirmed it.
-- Checksums in the browser use `crypto.subtle`, which needs HTTPS (or localhost); without it chunk
-  checksums are skipped and the final whole-file SHA-256 on the pull side still catches corruption.
+- Five wrong passwords (or five wrong pull tokens) from one address within 10 minutes block that address for
+  the rest of the window. Passwords and tokens are counted separately, so a misconfigured puller does not lock
+  you out of the web page.
+- Uploading the same name twice while it is still staged is refused (`409`); the name frees up once the puller
+  has confirmed it.
+- Checksums in the browser use `crypto.subtle`, which needs HTTPS (or localhost).
 - Tests: `go test -race ./...`
 
 MIT licensed.
@@ -131,12 +210,57 @@ MIT licensed.
 - 单个 Go 二进制、零依赖、一个端口、一个 Docker 镜像。
 - 网页拖拽上传文件或文件夹,显示每个文件的进度和速度,以及两段进度(浏览器→中转机、中转机→家里)。
 - 上传:8 MiB 分块,4 路并行,每块校验并带退避重试;关掉页面后再次拖入同一文件会接着传。
-- 拉取:单个大文件也会切成多段并行 `Range` 下载;进度落盘,重启可续;整文件 SHA-256 校验通过才落盘并通知中转机删除。
-- 安全:上传口令(登录失败限速)+ 独立的拉取令牌;暂存配额;自动清理废弃上传;拒绝路径穿越和隐藏文件名。
+- 拉取:单个大文件也会切成多段并行 `Range` 下载;进度落盘,重启可续;整文件 SHA-256 校验通过才落盘并通知中转机删除;
+  不会覆盖本地已有的同名文件。
+- 安全:上传口令 + 独立的拉取令牌(按地址限制失败次数);暂存配额;自动清理废弃上传;拒绝路径穿越和隐藏文件名。
 - 家里只需要出站连接,不用开放端口。
 - `relayport push <文件或文件夹>` 可以从命令行或脚本上传,断了重跑同一条命令即可续传。
 
-使用:镜像已发布为 `ghcr.io/saki340/relayport`(amd64/arm64)。中转机用 `compose.relay.yaml`,在同目录建
-`.env` 写上 `RELAYPORT_UPLOAD_PASSWORD` 和 `RELAYPORT_PULL_TOKEN`(可用 `openssl rand -hex 32` 生成),前面加
-Caddy/nginx 做 HTTPS;家里用 `compose.puller.yaml`,`.env` 里放同一个令牌。升级只需
-`docker compose pull && docker compose up -d`。配置项见上表。
+### 安装
+
+两台机器都要有 Docker(含 Compose):一台双方都能访问的**中转机**(通常是有公网 IP 的 VPS,域名可有可无),
+以及**目的端**(如 NAS,只需要能上网)。
+
+**1. 中转机**
+
+```sh
+mkdir relayport && cd relayport
+curl -fsSLO https://raw.githubusercontent.com/Saki340/relayport/main/compose.relay.yaml
+printf 'RELAYPORT_UPLOAD_PASSWORD=%s\nRELAYPORT_PULL_TOKEN=%s\n' "$(openssl rand -base64 18)" "$(openssl rand -hex 32)" > .env
+chmod 600 .env
+```
+
+- **A. 用 IP + 端口**(不需要域名):`echo 'RELAYPORT_PUBLISH=8080' >> .env`,再
+  `docker compose -f compose.relay.yaml up -d`。记得在 VPS 防火墙和云厂商的安全组里放行 TCP 8080。
+  访问地址是 `http://<服务器IP>:8080`。这是明文 HTTP,口令和文件都不加密,浏览器端也不做分块校验
+  (拉取端最终的 SHA-256 仍能发现损坏)。
+- **B. 用域名 + HTTPS**:直接 `docker compose -f compose.relay.yaml up -d`(只监听 `127.0.0.1:8080`),
+  再用反向代理指过去,Caddy 写 `relay.example.com { reverse_proxy 127.0.0.1:8080 }` 即可自动签证书。
+
+`cat .env` 可以看到上传口令(网页登录用)和拉取令牌(第 2 步用)。
+
+**2. 目的端**
+
+```sh
+mkdir relayport && cd relayport
+curl -fsSLO https://raw.githubusercontent.com/Saki340/relayport/main/compose.puller.yaml
+cat > .env <<EOF
+RELAYPORT_SERVER=http://203.0.113.5:8080
+RELAYPORT_PULL_TOKEN=change-me
+RELAYPORT_INBOX=$HOME/inbox
+RELAYPORT_UID=$(id -u)
+RELAYPORT_GID=$(id -g)
+EOF
+chmod 600 .env
+```
+
+把 `.env` 里的 `RELAYPORT_SERVER` 改成第 1 步的地址,`RELAYPORT_PULL_TOKEN` 换成中转机 `.env` 里的令牌
+(还是 `change-me` 时拒绝启动),`RELAYPORT_INBOX` 改成接收文件的目录(需已存在),然后
+`docker compose -f compose.puller.yaml up -d`。
+
+**3. 确认能用**:两边 `docker compose -f ... logs`。中转机第一行是版本号和 `serving on :8080`;拉取端显示
+`pulling from ...`。提示令牌被拒绝就是两边令牌不一致;连接超时多半是防火墙没放行端口或地址写错。
+然后在浏览器打开地址、登录、拖一个小文件,看到"waiting for NAS"→"to NAS"→消失,文件出现在接收目录即成功。
+
+升级:`docker compose -f ... pull`,再 `up -d`。命令行上传可以从 [Releases](https://github.com/Saki340/relayport/releases)
+下载对应系统的 `relayport` 可执行文件。配置项见上面的表格。

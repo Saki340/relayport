@@ -1,17 +1,19 @@
-# Run this on the relay host (a VPS with good connectivity to your uploader).
-# Put the secrets in a .env file next to this one (see README), then: docker compose -f compose.relay.yaml up -d
+# Run this on the relay host (a VPS that both the uploader and the destination can reach).
+# Put the settings in a .env file next to this one (see README), then: docker compose -f compose.relay.yaml up -d
 services:
   relayport:
     image: ghcr.io/saki340/relayport:0.1   # or build it yourself: docker build -t relayport .
     command: ["serve"]
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:8080"   # put a TLS reverse proxy (Caddy, nginx) in front
+      # Default: only this machine (put a TLS reverse proxy in front). RELAYPORT_PUBLISH=8080 in .env opens
+      # port 8080 on every interface instead, for plain http://<ip>:8080 access.
+      - "${RELAYPORT_PUBLISH:-127.0.0.1:8080}:8080"
     environment:
       RELAYPORT_UPLOAD_PASSWORD: ${RELAYPORT_UPLOAD_PASSWORD:?set it in .env}
       RELAYPORT_PULL_TOKEN: ${RELAYPORT_PULL_TOKEN:?set it in .env}
       RELAYPORT_QUOTA: 50GiB            # refuse uploads beyond this much staged data
       RELAYPORT_STALE_TTL: 48h          # drop half-finished uploads untouched this long
-      RELAYPORT_TRUST_PROXY: "1"        # read the client IP from X-Forwarded-For (only behind a proxy)
+      RELAYPORT_TRUST_PROXY: "1"        # X-Forwarded-For, believed only from local/private peers (the proxy)
     volumes:
       - ./data:/data

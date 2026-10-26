@@ -75,6 +75,19 @@ func envOr(key, def string) string {
 	return def
 }
 
+// serverURL returns RELAYPORT_SERVER without a trailing slash, insisting on a scheme
+// so that "203.0.113.5:8080" fails clearly instead of as a confusing request error.
+func serverURL() (string, error) {
+	v := strings.TrimRight(os.Getenv("RELAYPORT_SERVER"), "/")
+	switch {
+	case v == "":
+		return "", fmt.Errorf("RELAYPORT_SERVER must be set (e.g. https://relay.example.com or http://203.0.113.5:8080)")
+	case !strings.HasPrefix(v, "http://") && !strings.HasPrefix(v, "https://"):
+		return "", fmt.Errorf("RELAYPORT_SERVER %q must start with http:// or https://", v)
+	}
+	return v, nil
+}
+
 // requireSecret returns the value of a mandatory secret, refusing the
 // placeholders shipped in the example compose files.
 func requireSecret(key string) (string, error) {

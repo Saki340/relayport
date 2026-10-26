@@ -47,9 +47,9 @@ type pullState struct {
 }
 
 func runPull(ctx context.Context) error {
-	server := strings.TrimRight(os.Getenv("RELAYPORT_SERVER"), "/")
-	if server == "" {
-		return errors.New("RELAYPORT_SERVER must be set")
+	server, err := serverURL()
+	if err != nil {
+		return err
 	}
 	token, err := requireSecret("RELAYPORT_PULL_TOKEN")
 	if err != nil {
@@ -89,10 +89,16 @@ func runPull(ctx context.Context) error {
 	fileSlots := make(chan struct{}, files)
 	var wg sync.WaitGroup
 	defer wg.Wait()
+	lastErr := ""
 	for {
 		list, err := p.list(ctx)
-		if err != nil {
+		switch { // log a failing poll once, not every few seconds
+		case err != nil && err.Error() != lastErr:
 			log.Printf("list: %v", err)
+			lastErr = err.Error()
+		case err == nil && lastErr != "":
+			log.Print("list: relay reachable again")
+			lastErr = ""
 		}
 		for _, f := range list {
 			if !p.claim(f.Name) {
@@ -161,7 +167,13 @@ func (p *puller) list(ctx context.Context) ([]Staged, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusUnauthorized:
+		return nil, errors.New("the relay rejected RELAYPORT_PULL_TOKEN; it must be the same as in the relay's .env")
+	case http.StatusTooManyRequests:
+		return nil, errors.New("the relay is refusing this address for 10 minutes after repeated wrong tokens; fix RELAYPORT_PULL_TOKEN meanwhile")
+	default:
 		return nil, fmt.Errorf("server said %s", resp.Status)
 	}
 	var out []Staged

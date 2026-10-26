@@ -126,35 +126,45 @@ func (s *server) routes() http.Handler {
 
 // --- auth ---
 
+// clientIP is the address rate limits are keyed on. With trustProxy,
+// X-Forwarded-For is only believed when the connection comes from a loopback
+// or private address (the reverse proxy, or Docker's gateway in front of it),
+// so a client reaching an exposed port directly cannot spoof its address. The
+// last entry is the one added by the nearest proxy; earlier ones are client-supplied.
 func (s *server) clientIP(r *http.Request) string {
-	if s.trustProxy {
-		if v := r.Header.Get("X-Forwarded-For"); v != "" {
-			return strings.TrimSpace(strings.Split(v, ",")[0])
-		}
-	}
 	h, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		h = r.RemoteAddr
+	}
+	if s.trustProxy {
+		if peer := net.ParseIP(h); peer != nil && (peer.IsLoopback() || peer.IsPrivate()) {
+			if v := r.Header.Get("X-Forwarded-For"); v != "" {
+				parts := strings.Split(v, ",")
+				return strings.TrimSpace(parts[len(parts)-1])
+			}
+		}
 	}
 	return h
 }
 
-func (s *server) limited(ip string) bool {
+// limited and fail count failures per key ("login <ip>" or "pull <ip>"), so a
+// puller with a wrong token does not lock the web page out of the same address.
+func (s *server) limited(key string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	recent := s.failures[ip][:0]
-	for _, t := range s.failures[ip] {
+	recent := s.failures[key][:0]
+	for _, t := range s.failures[key] {
 		if time.Since(t) < failureWindow {
 			recent = append(recent, t)
 		}
 	}
-	s.failures[ip] = recent
+	s.failures[key] = recent
 	return len(recent) >= maxFailures
 }
 
-func (s *server) fail(ip string) {
+func (s *server) fail(key string) {
 	s.mu.Lock()
-	s.failures[ip] = append(s.failures[ip], time.Now())
+	s.failures[key] = append(s.failures[key], time.Now())
 	s.mu.Unlock()
 }
 
@@ -180,14 +190,14 @@ func (s *server) validCookie(v string) bool {
 }
 
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
-	ip := s.clientIP(r)
-	if s.limited(ip) {
-		http.Error(w, "too many failed attempts, try again later", http.StatusTooManyRequests)
+	key := "login " + s.clientIP(r)
+	if s.limited(key) {
+		http.Error(w, "too many failed logins from this address, try again in 10 minutes", http.StatusTooManyRequests)
 		return
 	}
 	var in struct{ Password string }
 	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in) != nil || !eq(in.Password, s.password) {
-		s.fail(ip)
+		s.fail(key)
 		http.Error(w, "wrong password", http.StatusUnauthorized)
 		return
 	}
@@ -212,14 +222,14 @@ func (s *server) session(h http.HandlerFunc) http.HandlerFunc {
 
 func (s *server) token(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ip := s.clientIP(r)
-		if s.limited(ip) {
-			http.Error(w, "too many failed attempts", http.StatusTooManyRequests)
+		key := "pull " + s.clientIP(r)
+		if s.limited(key) {
+			http.Error(w, "too many wrong pull tokens from this address, try again in 10 minutes", http.StatusTooManyRequests)
 			return
 		}
 		if !eq(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), s.pullToken) {
-			s.fail(ip)
-			http.Error(w, "bad token", http.StatusUnauthorized)
+			s.fail(key)
+			http.Error(w, "pull token rejected", http.StatusUnauthorized)
 			return
 		}
 		h(w, r)

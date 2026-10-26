@@ -36,6 +36,8 @@ Puller (`Authorization: Bearer <RELAYPORT_PULL_TOKEN>`): `GET /pull/list`, `GET 
   `.<name>.state`. Keep hidden names reserved: `CleanName` rejects any path element starting with `.`.
 - The pull side makes only outbound connections.
 - Run the puller container as the destination user (`user:` in compose), or files end up owned by root.
+- `X-Forwarded-For` is believed only from loopback/private peers and only its last entry, so an exposed port
+  cannot be used to spoof the rate-limit key. Login and pull-token failures are counted under separate keys.
 
 ## Build and test
 
@@ -54,8 +56,11 @@ same way (`docker build .` in build mode); Docker Desktop must be running.
 
 CI (`.github/workflows/ci.yml`) runs gofmt, vet, `go test -race` and a multi-arch image build. `release.yml`
 publishes `ghcr.io/<owner>/relayport` (`:edge` from main, `:X.Y.Z` / `:X.Y` / `:latest` from `vX.Y.Z` tags),
-stamping `VERSION`/`COMMIT` build args into the binary. The example compose files point at `ghcr.io/saki340/relayport:0.1`
-and read secrets from a `.env` next to them.
+stamping `VERSION`/`COMMIT` build args into the binary; a `v*` tag also creates a GitHub release with standalone
+binaries (linux/darwin/windows x amd64/arm64) and `SHA256SUMS`. The example compose files point at
+`ghcr.io/saki340/relayport:0.1` and take everything installation-specific from a `.env` next to them
+(`RELAYPORT_PUBLISH` on the relay; `RELAYPORT_SERVER`, `RELAYPORT_INBOX`, `RELAYPORT_UID/GID` on the puller), so the
+README install is copy-paste. Both IP:port (plain HTTP) and domain + reverse proxy setups are supported.
 
 ## Known gaps / ideas
 

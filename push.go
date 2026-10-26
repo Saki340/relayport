@@ -54,9 +54,9 @@ func runPush(ctx context.Context, args []string) error {
 	if flags.NArg() == 0 {
 		usage()
 	}
-	server := strings.TrimRight(os.Getenv("RELAYPORT_SERVER"), "/")
-	if server == "" {
-		return errors.New("RELAYPORT_SERVER must be set")
+	server, err := serverURL()
+	if err != nil {
+		return err
 	}
 	password, err := requireSecret("RELAYPORT_UPLOAD_PASSWORD")
 	if err != nil {
@@ -179,10 +179,15 @@ func (p *pusher) login(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if code != http.StatusNoContent {
-		return fmt.Errorf("login: %d %s", code, strings.TrimSpace(string(msg)))
+	switch code {
+	case http.StatusNoContent:
+		return nil
+	case http.StatusUnauthorized:
+		return errors.New("login: wrong RELAYPORT_UPLOAD_PASSWORD")
+	case http.StatusTooManyRequests:
+		return errors.New("login: the relay is refusing this address for 10 minutes after failed logins")
 	}
-	return nil
+	return fmt.Errorf("login: %d %s", code, strings.TrimSpace(string(msg)))
 }
 
 func (p *pusher) pushOne(ctx context.Context, it pushItem) error {

@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -299,6 +300,61 @@ func TestPlaceholderSecretsRefused(t *testing.T) {
 	t.Setenv("RELAYPORT_PULL_TOKEN", "3f9a0c1e8b7d6a5f4e3d2c1b0a9f8e7d")
 	if v, err := requireSecret("RELAYPORT_PULL_TOKEN"); err != nil || v == "" {
 		t.Errorf("real token refused: %v", err)
+	}
+}
+
+func TestClientIP(t *testing.T) {
+	s := &server{trustProxy: true}
+	for _, c := range []struct{ remote, xff, want string }{
+		{"127.0.0.1:5000", "6.6.6.6, 1.2.3.4", "1.2.3.4"}, // proxy on the host: last hop counts
+		{"172.17.0.1:5000", "1.2.3.4", "1.2.3.4"},         // Docker gateway in front of the proxy
+		{"8.8.8.8:5000", "1.2.3.4", "8.8.8.8"},            // direct client: header ignored
+		{"[2001:db8::1]:5000", "1.2.3.4", "2001:db8::1"},
+	} {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = c.remote
+		r.Header.Set("X-Forwarded-For", c.xff)
+		if got := s.clientIP(r); got != c.want {
+			t.Errorf("remote %s xff %q: got %s, want %s", c.remote, c.xff, got, c.want)
+		}
+	}
+	s.trustProxy = false
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "127.0.0.1:5000"
+	r.Header.Set("X-Forwarded-For", "1.2.3.4")
+	if got := s.clientIP(r); got != "127.0.0.1" {
+		t.Errorf("without trustProxy: got %s", got)
+	}
+}
+
+func TestWrongTokenDoesNotLockOutLogin(t *testing.T) {
+	_, ts := newTestServer(t, 0)
+	p := &puller{server: ts.URL, token: "wrong", client: http.DefaultClient}
+	var err error
+	for i := 0; i < maxFailures+1; i++ {
+		_, err = p.list(context.Background())
+	}
+	if err == nil || !strings.Contains(err.Error(), "10 minutes") {
+		t.Fatalf("want a rate limit explanation, got %v", err)
+	}
+	login(t, ts) // fails the test if the web login is blocked too
+}
+
+func TestPullErrorsAreExplained(t *testing.T) {
+	_, ts := newTestServer(t, 0)
+	p := &puller{server: ts.URL, token: "wrong", client: http.DefaultClient}
+	if _, err := p.list(context.Background()); err == nil || !strings.Contains(err.Error(), "RELAYPORT_PULL_TOKEN") {
+		t.Fatalf("want a token hint, got %v", err)
+	}
+	if err := newPusher(ts.URL, "nope", 1).login(context.Background()); err == nil || !strings.Contains(err.Error(), "RELAYPORT_UPLOAD_PASSWORD") {
+		t.Fatalf("want a password hint, got %v", err)
+	}
+	for v, ok := range map[string]bool{"": false, "203.0.113.5:8080": false, "http://203.0.113.5:8080/": true, "https://relay.example.com": true} {
+		t.Setenv("RELAYPORT_SERVER", v)
+		got, err := serverURL()
+		if (err == nil) != ok || (ok && strings.HasSuffix(got, "/")) {
+			t.Errorf("serverURL(%q) = %q, %v", v, got, err)
+		}
 	}
 }
 
