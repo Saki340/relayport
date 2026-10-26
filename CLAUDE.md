@@ -59,7 +59,7 @@ CI (`.github/workflows/ci.yml`) runs gofmt, vet, `go test -race` and a multi-arc
 publishes `ghcr.io/<owner>/relayport` (`:edge` from main, `:X.Y.Z` / `:X.Y` / `:latest` from `vX.Y.Z` tags),
 stamping `VERSION`/`COMMIT` build args into the binary; a `v*` tag also creates a GitHub release with standalone
 binaries (linux/darwin/windows x amd64/arm64) and `SHA256SUMS`. The example compose files point at
-`ghcr.io/saki340/relayport:0.1` and take everything installation-specific from a `.env` next to them
+`ghcr.io/saki340/relayport:0.2` and take everything installation-specific from a `.env` next to them
 (`RELAYPORT_PUBLISH` on the relay; `RELAYPORT_SERVER`, `RELAYPORT_INBOX`, `RELAYPORT_UID/GID` on the puller), so the
 README install is copy-paste. Both IP:port (plain HTTP) and domain + reverse proxy setups are supported.
 

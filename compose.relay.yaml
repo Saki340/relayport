@@ -2,7 +2,7 @@
 # Put the settings in a .env file next to this one (see README), then: docker compose -f compose.relay.yaml up -d
 services:
   relayport:
-    image: ghcr.io/saki340/relayport:0.1   # or build it yourself: docker build -t relayport .
+    image: ghcr.io/saki340/relayport:0.2   # or build it yourself: docker build -t relayport .
     command: ["serve"]
     restart: unless-stopped
     # Your own uid:gid (see `id`), so ./data stays yours. Create ./data before the first start, or Docker

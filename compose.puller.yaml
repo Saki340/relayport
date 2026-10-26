@@ -2,7 +2,7 @@
 # Put the settings in a .env file next to this one (see README), then: docker compose -f compose.puller.yaml up -d
 services:
   relayport-puller:
-    image: ghcr.io/saki340/relayport:0.1
+    image: ghcr.io/saki340/relayport:0.2
     command: ["pull"]
     restart: unless-stopped
     # Your own uid:gid (see `id`), so pulled files are not owned by root.

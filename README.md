@@ -36,7 +36,7 @@ You need Docker (with Compose) on two machines:
 - a **relay host** that both sides can reach, typically a VPS with a public IP. A domain is optional;
 - the **destination**, e.g. a NAS. It only needs outbound internet access.
 
-Images for amd64 and arm64: `ghcr.io/saki340/relayport` (`:0.1`, `:latest`, `:edge` for the main branch).
+Images for amd64 and arm64: `ghcr.io/saki340/relayport` (`:0.2`, `:latest`, `:edge` for the main branch).
 
 ### 1. Relay host
 
@@ -108,7 +108,7 @@ docker compose -f compose.relay.yaml logs     # on the relay
 docker compose -f compose.puller.yaml logs    # on the destination
 ```
 
-- The relay log starts with `relayport 0.1.x (...)` and `serving on :8080`.
+- The relay log starts with `relayport 0.2.x (...)` and `serving on :8080`.
 - The puller log says `pulling from <your address> into /inbox`. If it says the relay rejected the token, the
   two `RELAYPORT_PULL_TOKEN` values differ. A connection error or timeout usually means the port is not open in
   a firewall, or `RELAYPORT_SERVER` is wrong.
@@ -138,12 +138,12 @@ page (Linux, macOS and Windows, amd64 and arm64; `SHA256SUMS` alongside), or use
 export RELAYPORT_SERVER=http://203.0.113.5:8080 RELAYPORT_UPLOAD_PASSWORD=...
 ./relayport push ./photos ./notes.txt
 docker run --rm -e RELAYPORT_SERVER -e RELAYPORT_UPLOAD_PASSWORD -v "$PWD:/w" -w /w \
-  ghcr.io/saki340/relayport:0.1 push ./photos
+  ghcr.io/saki340/relayport:0.2 push ./photos
 ```
 
 ```powershell
 $env:RELAYPORT_SERVER = 'http://203.0.113.5:8080'; $env:RELAYPORT_UPLOAD_PASSWORD = '...'
-.\relayport_0.1.0_windows_amd64.exe push .\photos
+.\relayport_0.2.0_windows_amd64.exe push .\photos
 ```
 
 Folders keep their name, hidden files are skipped, `-to some/dir` puts everything under a folder on the relay.
