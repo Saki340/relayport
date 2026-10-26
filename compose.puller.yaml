@@ -4,6 +4,7 @@ services:
     image: relayport:latest
     command: ["pull"]
     restart: unless-stopped
+    user: "1000:1000"          # your own uid:gid (see `id`), so pulled files are not owned by root
     environment:
       RELAYPORT_SERVER: https://relay.example.com
       RELAYPORT_PULL_TOKEN: change-me-long-random-token

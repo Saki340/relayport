@@ -78,6 +78,8 @@ Open `https://relay.example.com`, sign in, and drop files.
 
 ## Notes
 
+- Run the puller container as your own uid:gid (`user:` in `compose.puller.yaml`); as root,
+  pulled files end up owned by root in the destination folder.
 - Plain HTTP works but sends the password and files in clear text; use TLS on the public side.
 - Uploading the same name twice while it is still staged is refused (`409`); the name frees up once the puller has confirmed it.
 - Checksums in the browser use `crypto.subtle`, which needs HTTPS (or localhost); without it chunk
