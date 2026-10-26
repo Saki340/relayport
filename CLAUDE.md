@@ -43,18 +43,17 @@ Puller (`Authorization: Bearer <RELAYPORT_PULL_TOKEN>`): `GET /pull/list`, `GET 
 
 ## Build and test
 
-Go is NOT installed on the Windows host. Follow the global rule: build and test through WSL.
+Go 1.24 (pinned in `mise.toml`; `mise exec -- go ...` installs it on first use). The same checks as CI:
 
 ```
-MSYS_NO_PATHCONV=1 pwsh.exe -NoProfile -File 'D:\WSL\Scripts\linux-task.ps1' -Mode build -Project 'D:\Project\relayport' -Command 'M=~/.local/bin/mise; $M exec -- gofmt -l .; $M exec -- go vet ./... && $M exec -- go test -race -count=1 ./...'
+gofmt -l .            # must print nothing
+go vet ./...
+go test -race -count=1 ./...
+docker build -t relayport .   # needs BuildKit (docker buildx)
 ```
 
-From Claude Code's Git Bash `pwsh.exe` may not be on PATH; calling the script from the PowerShell tool
-(`& 'D:\WSL\Scripts\linux-task.ps1' -Mode build ...`) works.
-
-`mise.toml` pins Go 1.24 (installed on first use). `gofmt -w` in the mirror changes only the mirror: copy the
-formatted files back to the Windows source deliberately, never sync the whole mirror. Docker builds work the
-same way (`docker build .` in build mode); Docker Desktop must be running.
+Machine-specific build setups (for example running these in a Linux VM or WSL from a Windows checkout)
+belong in `CLAUDE.local.md`.
 
 CI (`.github/workflows/ci.yml`) runs gofmt, vet, `go test -race` and a multi-arch image build. `release.yml`
 publishes `ghcr.io/<owner>/relayport` (`:edge` from main, `:X.Y.Z` / `:X.Y` / `:latest` from `vX.Y.Z` tags),
