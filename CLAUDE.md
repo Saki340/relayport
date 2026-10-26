@@ -35,7 +35,9 @@ Puller (`Authorization: Bearer <RELAYPORT_PULL_TOKEN>`): `GET /pull/list`, `GET 
 - The puller never exposes a half-written file under its final name: partials are `.<name>.part` plus
   `.<name>.state`. Keep hidden names reserved: `CleanName` rejects any path element starting with `.`.
 - The pull side makes only outbound connections.
-- Run the puller container as the destination user (`user:` in compose), or files end up owned by root.
+- Run both containers as the host user (`user:` from `RELAYPORT_UID/GID` in compose), or `data/` and pulled
+  files end up owned by root. `NewStore` probes that `inbox/` and `tmp/` are writable and fails at startup with
+  a chown hint, instead of failing at the first upload.
 - `X-Forwarded-For` is believed only from loopback/private peers and only its last entry, so an exposed port
   cannot be used to spoof the rate-limit key. Login and pull-token failures are counted under separate keys.
 

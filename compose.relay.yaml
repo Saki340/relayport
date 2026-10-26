@@ -5,6 +5,9 @@ services:
     image: ghcr.io/saki340/relayport:0.1   # or build it yourself: docker build -t relayport .
     command: ["serve"]
     restart: unless-stopped
+    # Your own uid:gid (see `id`), so ./data stays yours. Create ./data before the first start, or Docker
+    # creates it owned by root and the relay cannot write to it.
+    user: "${RELAYPORT_UID:-1000}:${RELAYPORT_GID:-1000}"
     ports:
       # Default: only this machine (put a TLS reverse proxy in front). RELAYPORT_PUBLISH=8080 in .env opens
       # port 8080 on every interface instead, for plain http://<ip>:8080 access.

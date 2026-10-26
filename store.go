@@ -79,12 +79,29 @@ func NewStore(root string, quota int64) (*Store, error) {
 	s := &Store{root: root, quota: quota, uploads: map[string]*Upload{}, staged: map[string]*Staged{}}
 	for _, d := range []string{s.inboxDir(), s.tmpDir()} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
-			return nil, err
+			return nil, notWritable(root, err)
 		}
+		// Existing folders owned by someone else (e.g. root, from an older setup) would
+		// otherwise only fail at the first upload.
+		f, err := os.CreateTemp(d, ".probe-*")
+		if err != nil {
+			return nil, notWritable(root, err)
+		}
+		f.Close()
+		os.Remove(f.Name())
 	}
 	s.loadUploads()
 	s.scanInbox()
 	return s, nil
+}
+
+func notWritable(root string, err error) error {
+	if !errors.Is(err, fs.ErrPermission) {
+		return err
+	}
+	return fmt.Errorf("%w: the data folder %s must be writable by uid %d gid %d; create it before the first start, "+
+		"or give it to that user (sudo chown -R %d:%d <folder on the host>)",
+		err, root, os.Getuid(), os.Getgid(), os.Getuid(), os.Getgid())
 }
 
 func (s *Store) inboxDir() string { return filepath.Join(s.root, "inbox") }

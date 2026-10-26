@@ -358,6 +358,26 @@ func TestPullErrorsAreExplained(t *testing.T) {
 	}
 }
 
+func TestStoreRefusesUnwritableData(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write anywhere")
+	}
+	root := t.TempDir()
+	for _, d := range []string{"inbox", "tmp"} {
+		os.Mkdir(filepath.Join(root, d), 0o755)
+	}
+	tmp := filepath.Join(root, "tmp")
+	os.Chmod(tmp, 0o555) // like a folder left owned by root
+	t.Cleanup(func() { os.Chmod(tmp, 0o755) })
+	_, err := NewStore(root, 0)
+	if err == nil || !strings.Contains(err.Error(), "must be writable") {
+		t.Fatalf("want a clear permission error, got %v", err)
+	}
+	if ents, _ := os.ReadDir(filepath.Join(root, "inbox")); len(ents) != 0 {
+		t.Fatalf("probe file left behind: %v", ents)
+	}
+}
+
 func TestAuthQuotaAndNames(t *testing.T) {
 	_, ts := newTestServer(t, 1<<20)
 	if r, _ := http.Get(ts.URL + "/api/state"); r.StatusCode != 401 {

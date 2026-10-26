@@ -41,9 +41,10 @@ Images for amd64 and arm64: `ghcr.io/saki340/relayport` (`:0.1`, `:latest`, `:ed
 ### 1. Relay host
 
 ```sh
-mkdir relayport && cd relayport
+mkdir -p relayport/data && cd relayport
 curl -fsSLO https://raw.githubusercontent.com/Saki340/relayport/main/compose.relay.yaml
-printf 'RELAYPORT_UPLOAD_PASSWORD=%s\nRELAYPORT_PULL_TOKEN=%s\n' "$(openssl rand -base64 18)" "$(openssl rand -hex 32)" > .env
+printf 'RELAYPORT_UPLOAD_PASSWORD=%s\nRELAYPORT_PULL_TOKEN=%s\nRELAYPORT_UID=%s\nRELAYPORT_GID=%s\n' \
+  "$(openssl rand -base64 18)" "$(openssl rand -hex 32)" "$(id -u)" "$(id -g)" > .env
 chmod 600 .env
 ```
 
@@ -118,8 +119,15 @@ docker compose -f compose.puller.yaml logs    # on the destination
 ### Updating
 
 Run `docker compose -f compose.<relay|puller>.yaml pull` and then `up -d` with the same file. The first log line
-shows the running version. To build the image yourself instead: `docker build -t relayport .` (add
+shows the running version.
+
+Older compose files ran the relay as root, so its `data/` belongs to root. When moving to the current
+`compose.relay.yaml`, add `RELAYPORT_UID` / `RELAYPORT_GID` to `.env` and hand the folder over once:
+`sudo chown -R "$(id -u):$(id -g)" data`. Until then the relay stops at startup with
+`the data folder /data must be writable by uid ...`. To build the image yourself instead: `docker build -t relayport .` (add
 `--build-arg VERSION=... --build-arg COMMIT=...` to stamp it) and change `image:` in the compose file.
+Building needs BuildKit (`docker buildx`); Ubuntu's `docker.io` package does not include it, so install
+`docker-buildx` as well, otherwise the build stops at `failed to parse platform`.
 
 ## Uploading from the command line
 
@@ -150,7 +158,7 @@ Compose `.env` variables (used by the example compose files):
 | `RELAYPORT_PUBLISH` | relay | published port, default `127.0.0.1:8080`; `8080` = every interface |
 | `RELAYPORT_SERVER` | puller | relay address, `http://<ip>:<port>` or `https://<domain>` |
 | `RELAYPORT_INBOX` | puller | host folder that receives the files |
-| `RELAYPORT_UID` / `RELAYPORT_GID` | puller | owner of pulled files, default `1000` |
+| `RELAYPORT_UID` / `RELAYPORT_GID` | both | user the container runs as (owner of `data/` and of pulled files), default `1000` |
 
 `relayport serve`
 
@@ -224,9 +232,10 @@ MIT licensed.
 **1. 中转机**
 
 ```sh
-mkdir relayport && cd relayport
+mkdir -p relayport/data && cd relayport
 curl -fsSLO https://raw.githubusercontent.com/Saki340/relayport/main/compose.relay.yaml
-printf 'RELAYPORT_UPLOAD_PASSWORD=%s\nRELAYPORT_PULL_TOKEN=%s\n' "$(openssl rand -base64 18)" "$(openssl rand -hex 32)" > .env
+printf 'RELAYPORT_UPLOAD_PASSWORD=%s\nRELAYPORT_PULL_TOKEN=%s\nRELAYPORT_UID=%s\nRELAYPORT_GID=%s\n' \
+  "$(openssl rand -base64 18)" "$(openssl rand -hex 32)" "$(id -u)" "$(id -g)" > .env
 chmod 600 .env
 ```
 
@@ -262,5 +271,8 @@ chmod 600 .env
 `pulling from ...`。提示令牌被拒绝就是两边令牌不一致;连接超时多半是防火墙没放行端口或地址写错。
 然后在浏览器打开地址、登录、拖一个小文件,看到"waiting for NAS"→"to NAS"→消失,文件出现在接收目录即成功。
 
-升级:`docker compose -f ... pull`,再 `up -d`。命令行上传可以从 [Releases](https://github.com/Saki340/relayport/releases)
+升级:`docker compose -f ... pull`,再 `up -d`。旧版 compose 里中转端以 root 运行,`data/` 归 root;换成现在的
+`compose.relay.yaml` 时,在 `.env` 里加上 `RELAYPORT_UID` / `RELAYPORT_GID`,并执行一次
+`sudo chown -R "$(id -u):$(id -g)" data`,否则中转端启动时会报 `the data folder /data must be writable by uid ...`。自己从源码构建镜像需要 BuildKit(`docker buildx`):Ubuntu 的
+`docker.io` 包不带它,要另装 `docker-buildx`,否则会报 `failed to parse platform`。命令行上传可以从 [Releases](https://github.com/Saki340/relayport/releases)
 下载对应系统的 `relayport` 可执行文件。配置项见上面的表格。
