@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
@@ -199,11 +200,14 @@ func (p *puller) pullOne(ctx context.Context, f Staged) error {
 		return err
 	}
 
-	// A finished file whose confirmation never reached the relay.
-	if info, err := os.Stat(final); err == nil && info.Size() == f.Size {
-		if sum, err := hashFile(final); err == nil && sum == f.SHA256 {
-			log.Printf("%s: already present, confirming", f.Name)
-			return p.post(ctx, "/pull/done", map[string]string{"name": f.Name, "sha256": sum})
+	// Either a finished file whose confirmation never reached the relay, or an
+	// unrelated local file with the same name, which must never be overwritten.
+	if info, err := os.Stat(final); err == nil {
+		if info.Mode().IsRegular() && info.Size() == f.Size {
+			if sum, err := hashFile(final); err == nil && sum == f.SHA256 {
+				log.Printf("%s: already present, confirming", f.Name)
+				return p.post(ctx, "/pull/done", map[string]string{"name": f.Name, "sha256": sum})
+			}
 		}
 		return fmt.Errorf("%s exists locally with different content; move it away", final)
 	}
@@ -319,8 +323,8 @@ func (p *puller) pullOne(ctx context.Context, f Staged) error {
 		return fmt.Errorf("checksum mismatch after download, discarded and will start over")
 	}
 	pf.Close()
-	if err := os.Rename(part, final); err != nil {
-		return err
+	if err := placeNoClobber(part, final); err != nil {
+		return err // part and state are kept, so a later attempt only re-verifies
 	}
 	os.Remove(statePath)
 	if err := p.post(ctx, "/pull/done", map[string]string{"name": f.Name, "sha256": sum}); err != nil {
@@ -329,6 +333,23 @@ func (p *puller) pullOne(ctx context.Context, f Staged) error {
 	secs := time.Since(start).Seconds()
 	log.Printf("%s: done in %.0fs (%.1f MiB/s)", f.Name, secs, float64(f.Size)/secs/(1<<20))
 	return nil
+}
+
+// placeNoClobber moves part to final, failing if final already exists (another
+// process may have created it while we were downloading). A hard link is atomic
+// and refuses an existing target; filesystems without links fall back to rename.
+func placeNoClobber(part, final string) error {
+	err := os.Link(part, final)
+	if err == nil {
+		return os.Remove(part)
+	}
+	if errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("%s appeared locally during the download; move it away", final)
+	}
+	if _, serr := os.Lstat(final); serr == nil {
+		return fmt.Errorf("%s appeared locally during the download; move it away", final)
+	}
+	return os.Rename(part, final)
 }
 
 func countTrue(b []bool) (n int) {

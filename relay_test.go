@@ -171,6 +171,51 @@ func TestPullResumesAndRejectsCorruptState(t *testing.T) {
 	}
 }
 
+func TestPullNeverOverwritesLocalFile(t *testing.T) {
+	s, ts := newTestServer(t, 0)
+	c := login(t, ts)
+	data := make([]byte, 3<<20)
+	rand.Read(data)
+	uploadFile(t, c, ts, "a.bin", data, nil)
+	complete(t, c, ts, "a.bin")
+	for len(s.store.Ready()) < 1 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	f := s.store.Ready()[0]
+
+	// Same name, different size, and same size with different content.
+	for _, local := range [][]byte{[]byte("someone else's file"), make([]byte, len(data))} {
+		dest := t.TempDir()
+		p := &puller{server: ts.URL, token: "tok", dest: dest, segSize: 1 << 20,
+			slots: make(chan struct{}, 2), client: http.DefaultClient, active: map[string]bool{}}
+		os.WriteFile(filepath.Join(dest, "a.bin"), local, 0o644)
+		if err := p.pullOne(context.Background(), f); err == nil {
+			t.Fatalf("pull over a %d-byte local file must fail", len(local))
+		}
+		if got, _ := os.ReadFile(filepath.Join(dest, "a.bin")); !bytes.Equal(got, local) {
+			t.Fatalf("local %d-byte file was overwritten", len(local))
+		}
+		if len(s.store.Ready()) != 1 {
+			t.Fatal("relay deleted its copy although the pull was refused")
+		}
+	}
+
+	// A file that appears at the final name during the download is kept too.
+	dir := t.TempDir()
+	part, final := filepath.Join(dir, ".x.part"), filepath.Join(dir, "x")
+	os.WriteFile(part, []byte("new"), 0o644)
+	os.WriteFile(final, []byte("old"), 0o644)
+	if err := placeNoClobber(part, final); err == nil {
+		t.Fatal("placeNoClobber replaced an existing file")
+	}
+	if got, _ := os.ReadFile(final); string(got) != "old" {
+		t.Fatalf("final changed to %q", got)
+	}
+	if _, err := os.Stat(part); err != nil {
+		t.Fatal("partial file must be kept for a later attempt")
+	}
+}
+
 func TestAuthQuotaAndNames(t *testing.T) {
 	_, ts := newTestServer(t, 1<<20)
 	if r, _ := http.Get(ts.URL + "/api/state"); r.StatusCode != 401 {
