@@ -5,35 +5,267 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>relayport</title>
 <style>
-  :root { color-scheme: light dark; --fg:#1d1d1f; --bg:#fff; --mut:#6b7280; --line:#e5e7eb; --acc:#2563eb; --ok:#16a34a; --bad:#dc2626; }
-  @media (prefers-color-scheme: dark) { :root { --fg:#e5e7eb; --bg:#111827; --mut:#9ca3af; --line:#374151; --acc:#60a5fa; --ok:#4ade80; --bad:#f87171; } }
-  body { font: 15px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.2rem; }
-  #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 2rem; text-align: center; color: var(--mut); cursor: pointer; }
-  #drop.over { border-color: var(--acc); color: var(--acc); }
-  .row { padding: .6rem 0; border-bottom: 1px solid var(--line); }
-  .top { display: flex; justify-content: space-between; gap: 1rem; }
-  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .meta { color: var(--mut); font-size: 13px; white-space: nowrap; }
-  .bar { height: 6px; background: var(--line); border-radius: 3px; margin-top: 4px; overflow: hidden; }
-  .bar > i { display: block; height: 100%; background: var(--acc); width: 0; transition: width .3s; }
-  .bar.pull > i { background: var(--ok); }
-  .err { color: var(--bad); font-size: 13px; }
-  input, button { font: inherit; padding: .4rem .7rem; }
-  #login { display: none; }
+/* Material 3 Expressive look after petal-elements: its system tokens (colors from sys.css, type scale, shapes,
+   expressive springs), copied as plain CSS so the page stays one file with no external requests. */
+:root {
+  color-scheme: light dark;
+  --md-sys-color-primary: light-dark(#6750a4, #d0bcff);
+  --md-sys-color-on-primary: light-dark(#ffffff, #381e72);
+  --md-sys-color-primary-container: light-dark(#eaddff, #4f378b);
+  --md-sys-color-on-primary-container: light-dark(#4f378b, #eaddff);
+  --md-sys-color-secondary: light-dark(#625b71, #ccc2dc);
+  --md-sys-color-secondary-container: light-dark(#e8def8, #4a4458);
+  --md-sys-color-on-secondary-container: light-dark(#4a4458, #e8def8);
+  --md-sys-color-tertiary: light-dark(#7d5260, #efb8c8);
+  --md-sys-color-tertiary-container: light-dark(#ffd8e4, #633b48);
+  --md-sys-color-on-tertiary-container: light-dark(#633b48, #ffd8e4);
+  --md-sys-color-error: light-dark(#b3261e, #f2b8b5);
+  --md-sys-color-error-container: light-dark(#f9dedc, #8c1d18);
+  --md-sys-color-on-error-container: light-dark(#8c1d18, #f9dedc);
+  --md-sys-color-surface: light-dark(#fef7ff, #141218);
+  --md-sys-color-on-surface: light-dark(#1d1b20, #e6e0e9);
+  --md-sys-color-on-surface-variant: light-dark(#49454f, #cac4d0);
+  --md-sys-color-surface-container-low: light-dark(#f7f2fa, #1d1b20);
+  --md-sys-color-surface-container: light-dark(#f3edf7, #211f26);
+  --md-sys-color-surface-container-high: light-dark(#ece6f0, #2b2930);
+  --md-sys-color-surface-container-highest: light-dark(#e6e0e9, #36343b);
+  --md-sys-color-outline: light-dark(#79747e, #938f99);
+  --md-sys-color-outline-variant: light-dark(#cac4d0, #49454f);
+
+  --font: Roboto, system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --md-sys-typescale-title-large: 400 1.375rem/1.75rem var(--font);
+  --md-sys-typescale-title-medium: 500 1rem/1.5rem var(--font);
+  --md-sys-typescale-title-small: 500 0.875rem/1.25rem var(--font);
+  --md-sys-typescale-headline-small: 400 1.5rem/2rem var(--font);
+  --md-sys-typescale-body-large: 400 1rem/1.5rem var(--font);
+  --md-sys-typescale-body-medium: 400 0.875rem/1.25rem var(--font);
+  --md-sys-typescale-body-small: 400 0.75rem/1rem var(--font);
+  --md-sys-typescale-label-large: 500 0.875rem/1.25rem var(--font);
+  --md-sys-typescale-label-medium: 500 0.75rem/1rem var(--font);
+
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-full: 9999px;
+
+  --md-sys-motion-spring-fast-spatial: linear(0, 0.0205, 0.075, 0.1537, 0.2481, 0.3509, 0.4562, 0.5594, 0.6567, 0.7458, 0.8248, 0.8931, 0.9503, 0.9966, 1.0326, 1.0593, 1.0777, 1.0889, 1.0941, 1.0944, 1.0909, 1.0846, 1.0764, 1.0671, 1.0572, 1.0472, 1.0377, 1.0287, 1.0207, 1.0136, 1.0076, 1.0027, 0.9987, 0.9957, 0.9935, 0.9921, 0.9913, 0.991, 0.9912, 0.9916, 0.9923, 0.9931, 0.994, 0.995, 0.9959, 0.9968, 0.9976, 0.9983, 1);
+  --md-sys-motion-spring-fast-spatial-duration: 359ms;
+  --md-sys-motion-spring-default-spatial: linear(0, 0.0141, 0.0514, 0.1051, 0.1698, 0.241, 0.3152, 0.3897, 0.4623, 0.5316, 0.5966, 0.6564, 0.7108, 0.7597, 0.803, 0.8411, 0.874, 0.9023, 0.9262, 0.9463, 0.9629, 0.9764, 0.9872, 0.9957, 1.0023, 1.0071, 1.0106, 1.0129, 1.0144, 1.015, 1.0151, 1.0148, 1.0142, 1.0133, 1.0123, 1.0112, 1.0101, 1.0089, 1.0078, 1.0068, 1.0058, 1.005, 1.0042, 1.0034, 1.0028, 1.0023, 1.0018, 1.0014, 1);
+  --md-sys-motion-spring-default-spatial-duration: 434ms;
+  --md-sys-motion-spring-fast-effects: linear(0, 0.0161, 0.057, 0.1134, 0.1788, 0.2483, 0.3185, 0.3871, 0.4524, 0.5136, 0.5701, 0.6216, 0.6683, 0.7101, 0.7475, 0.7806, 0.8099, 0.8356, 0.8581, 0.8778, 0.8949, 0.9098, 0.9226, 0.9338, 0.9434, 0.9516, 0.9587, 0.9648, 0.97, 0.9745, 0.9783, 0.9816, 0.9844, 0.9868, 0.9888, 0.9905, 0.992, 0.9932, 0.9943, 0.9951, 0.9959, 0.9965, 0.9971, 0.9975, 0.9979, 0.9982, 0.9985, 0.9988, 1);
+  --md-sys-motion-spring-fast-effects-duration: 149ms;
+  --md-sys-motion-spring-default-effects: linear(0, 0.0162, 0.0571, 0.1137, 0.1793, 0.2489, 0.3192, 0.3879, 0.4533, 0.5145, 0.571, 0.6225, 0.6691, 0.711, 0.7483, 0.7814, 0.8106, 0.8363, 0.8587, 0.8783, 0.8954, 0.9102, 0.9231, 0.9342, 0.9437, 0.9519, 0.959, 0.9651, 0.9703, 0.9747, 0.9785, 0.9818, 0.9845, 0.9869, 0.9889, 0.9906, 0.992, 0.9933, 0.9943, 0.9952, 0.9959, 0.9966, 0.9971, 0.9976, 0.9979, 0.9983, 0.9985, 0.9988, 1);
+  --md-sys-motion-spring-default-effects-duration: 230ms;
+}
+@property --p { syntax: '<number>'; inherits: true; initial-value: 0; }
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh;
+  background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-body-large); letter-spacing: 0.03125rem;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, p { margin: 0; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 3px solid var(--md-sys-color-secondary); outline-offset: 2px; }
+svg.i { width: 24px; height: 24px; fill: currentColor; flex: none; }
+
+/* Small top app bar: 64px, title-large. */
+.appbar { display: flex; align-items: center; gap: 12px; height: 64px; padding: 0 16px; max-width: 840px; margin: 0 auto; }
+.appbar .logo { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.appbar h1 { font: var(--md-sys-typescale-title-large); letter-spacing: 0; }
+.content { max-width: 840px; margin: 0 auto; padding: 8px 16px 32px; display: grid; gap: 16px; }
+@media (width >= 600px) { .appbar, .content { padding-inline: 24px; } }
+.stack { display: grid; gap: 16px; }
+
+/* Buttons: 40px, full corners that morph to a smaller radius while pressed (Compose ButtonShapes). */
+.btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 16px; border: 0; border-radius: var(--md-sys-shape-corner-full); overflow: hidden;
+  font: var(--md-sys-typescale-label-large); letter-spacing: 0.00625rem; cursor: pointer; user-select: none;
+  transition: border-radius var(--md-sys-motion-spring-fast-spatial-duration) var(--md-sys-motion-spring-fast-spatial);
+}
+.btn svg.i { width: 20px; height: 20px; }
+.btn::after { content: ""; position: absolute; inset: 0; background: currentColor; opacity: 0; pointer-events: none;
+  transition: opacity var(--md-sys-motion-spring-fast-effects-duration) var(--md-sys-motion-spring-fast-effects); }
+.btn:hover::after { opacity: .08; }
+.btn:active::after { opacity: .1; }
+.btn:active { border-radius: var(--md-sys-shape-corner-small); }
+.btn:disabled { cursor: default; background: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent); color: color-mix(in srgb, var(--md-sys-color-on-surface) 38%, transparent); }
+.btn:disabled::after { display: none; }
+.filled { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.tonal { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.outlined { background: transparent; color: var(--md-sys-color-on-surface-variant); box-shadow: inset 0 0 0 1px var(--md-sys-color-outline-variant); }
+.icon-btn { width: 40px; padding: 0; color: var(--md-sys-color-on-surface-variant); background: transparent; }
+
+/* Login: a card with an outlined text field. */
+.login { justify-self: center; width: min(100%, 400px); margin-top: 8vh; padding: 24px;
+  border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container-low); --field-bg: var(--md-sys-color-surface-container-low);
+  display: grid; gap: 16px; }
+.login .hero { display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.login h2 { font: var(--md-sys-typescale-headline-small); }
+.login p { font: var(--md-sys-typescale-body-medium); color: var(--md-sys-color-on-surface-variant); }
+.login .actions { display: flex; justify-content: flex-end; }
+
+.field { position: relative; display: block; }
+.field input {
+  width: 100%; height: 56px; padding: 0 52px 0 16px; margin: 0;
+  border: 1px solid var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-extra-small);
+  background: transparent; color: var(--md-sys-color-on-surface); font: var(--md-sys-typescale-body-large); caret-color: var(--md-sys-color-primary);
+  outline: none;
+}
+.field input:hover { border-color: var(--md-sys-color-on-surface); }
+.field input:focus { border-color: var(--md-sys-color-primary); box-shadow: inset 0 0 0 1px var(--md-sys-color-primary); }
+.field .label {
+  position: absolute; inset-inline-start: 12px; top: 28px; translate: 0 -50%; padding: 0 4px; pointer-events: none;
+  background: var(--field-bg); color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-typescale-body-large);
+  transition: top var(--md-sys-motion-spring-fast-spatial-duration) var(--md-sys-motion-spring-fast-spatial),
+    font-size var(--md-sys-motion-spring-fast-spatial-duration) var(--md-sys-motion-spring-fast-spatial);
+}
+.field input:focus + .label, .field input:not(:placeholder-shown) + .label { top: 0; font: var(--md-sys-typescale-body-small); }
+.field input:focus + .label { color: var(--md-sys-color-primary); }
+.field .icon-btn { position: absolute; inset-inline-end: 4px; top: 8px; }
+.field .support { display: block; min-height: 16px; padding: 4px 16px 0; font: var(--md-sys-typescale-body-small); color: var(--md-sys-color-on-surface-variant); }
+.field.error input, .field.error input:focus { border-color: var(--md-sys-color-error); }
+.field.error input:focus { box-shadow: inset 0 0 0 1px var(--md-sys-color-error); }
+.field.error input + .label, .field.error .support { color: var(--md-sys-color-error); }
+
+/* Drop zone: a large card; the icon container morphs from a rounded square to a circle while dragging over. */
+.drop {
+  display: grid; justify-items: center; gap: 12px; padding: 32px 24px; text-align: center; cursor: pointer;
+  border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container-low);
+  outline: 2px dashed var(--md-sys-color-outline-variant); outline-offset: -2px;
+  transition: background-color var(--md-sys-motion-spring-default-effects-duration) var(--md-sys-motion-spring-default-effects);
+}
+.drop .badge { display: grid; place-items: center; width: 72px; height: 72px; border-radius: var(--md-sys-shape-corner-extra-large);
+  background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
+  transition: border-radius var(--md-sys-motion-spring-default-spatial-duration) var(--md-sys-motion-spring-default-spatial),
+    scale var(--md-sys-motion-spring-default-spatial-duration) var(--md-sys-motion-spring-default-spatial); }
+.drop .badge svg.i { width: 36px; height: 36px; }
+.drop h2 { font: var(--md-sys-typescale-title-medium); }
+.drop p { font: var(--md-sys-typescale-body-medium); color: var(--md-sys-color-on-surface-variant); }
+.drop .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.drop:hover .badge { border-radius: var(--md-sys-shape-corner-large); }
+.drop.over { background: var(--md-sys-color-primary-container); outline-color: var(--md-sys-color-primary); }
+.drop.over .badge { border-radius: var(--md-sys-shape-corner-full); scale: 1.1; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+
+/* Linear progress (Compose LinearProgressIndicator): 4px, round caps, 4px gap before the track, stop dot at the end. */
+.bar { --c: var(--md-sys-color-primary); --t: var(--md-sys-color-secondary-container); position: relative; height: 4px;
+  transition: --p var(--md-sys-motion-spring-default-effects-duration) var(--md-sys-motion-spring-default-effects); }
+.bar::before { content: ""; position: absolute; inset: 0 0 0 calc(var(--p) * 100% + min(4px, var(--p) * 400px)); border-radius: 2px; background: var(--t); }
+.bar > i { position: absolute; inset: 0 auto 0 0; width: calc(var(--p) * 100%); border-radius: 2px; background: var(--c); }
+.bar::after { content: ""; position: absolute; top: 0; right: 0; width: 4px; height: 4px; border-radius: 2px; background: var(--c); }
+.bar.nas { --c: var(--md-sys-color-tertiary); }
+.bar.err { --c: var(--md-sys-color-error); --t: var(--md-sys-color-error-container); }
+.bar.indet { overflow: hidden; }
+.bar.indet::before { left: 0; }
+.bar.indet::after { display: none; }
+.bar.indet > i { width: 35%; animation: indet 1.8s infinite cubic-bezier(.65, 0, .35, 1); box-shadow: 0 0 0 4px var(--field-bg, var(--md-sys-color-surface-container-low)); }
+@keyframes indet { from { translate: -110% 0; } to { translate: 300% 0; } }
+
+.meter { display: grid; gap: 8px; padding: 0 4px; }
+.meter .top { display: flex; align-items: center; gap: 8px; font: var(--md-sys-typescale-label-large); color: var(--md-sys-color-on-surface-variant); }
+.meter .top svg.i { width: 20px; height: 20px; }
+.meter .top span:last-child { margin-inline-start: auto; font: var(--md-sys-typescale-body-small); }
+
+/* Transfers: a list on a surface-container card. */
+.section h2 { font: var(--md-sys-typescale-title-small); color: var(--md-sys-color-on-surface-variant); padding: 8px 4px 8px; }
+.list { border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-surface-container-low); overflow: hidden; --field-bg: var(--md-sys-color-surface-container-low); }
+.item { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 16px; row-gap: 4px; align-items: center; padding: 12px 24px 14px 16px; }
+.item + .item { border-top: 1px solid var(--md-sys-color-outline-variant); }
+.item .av { grid-row: span 2; display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--md-sys-shape-corner-full);
+  transition: border-radius var(--md-sys-motion-spring-default-spatial-duration) var(--md-sys-motion-spring-default-spatial); }
+.item .av svg.i { width: 20px; height: 20px; }
+.item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--md-sys-typescale-body-large); }
+.item .pct { font: var(--md-sys-typescale-label-medium); color: var(--md-sys-color-on-surface-variant); font-variant-numeric: tabular-nums; }
+.item .sub { grid-column: 2 / 4; display: grid; gap: 8px; font: var(--md-sys-typescale-body-medium); color: var(--md-sys-color-on-surface-variant); font-variant-numeric: tabular-nums; }
+.item .sub .msg { overflow-wrap: anywhere; }
+.item.error .sub .msg { color: var(--md-sys-color-error); }
+.av.s-up { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); border-radius: var(--md-sys-shape-corner-medium); }
+.av.s-wait, .av.s-check, .av.s-recv { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.av.s-nas { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); border-radius: var(--md-sys-shape-corner-medium); }
+.av.s-idle { background: var(--md-sys-color-surface-container-highest); color: var(--md-sys-color-on-surface-variant); }
+.av.s-err { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
+.empty { display: grid; justify-items: center; gap: 8px; padding: 40px 16px; color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-typescale-body-medium); }
+.empty svg.i { width: 32px; height: 32px; opacity: .7; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0s !important; }
+  .bar.indet > i { animation: none; width: 100%; opacity: .5; }
+}
 </style>
 </head>
 <body>
-<h1>relayport</h1>
-<form id="login">
-  <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
-  <button>Sign in</button> <span id="lerr" class="err"></span>
-</form>
-<div id="main" hidden>
-  <div id="drop">Drop files or folders here, or click to choose files<input id="pick" type="file" multiple hidden></div>
-  <p class="meta" id="space"></p>
-  <div id="list"></div>
-</div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-relay" viewBox="0 0 24 24"><path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M6 2v6h.01L6 8.01 10 12l-4 4 .01.01H6V22h12v-5.99h-.01L18 16l-4-4 4-3.99-.01-.01H18V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5l-4-4V4h8v3.5l-4 4z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></symbol>
+  <symbol id="i-error" viewBox="0 0 24 24"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M19 3H4.99c-1.11 0-1.98.89-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></symbol>
+  <symbol id="i-storage" viewBox="0 0 24 24"><path d="M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z"/></symbol>
+</svg>
+
+<header class="appbar">
+  <span class="logo"><svg class="i"><use href="#i-relay"/></svg></span>
+  <h1>relayport</h1>
+</header>
+
+<main class="content">
+  <form id="login" class="login" hidden>
+    <span class="hero"><svg class="i"><use href="#i-lock"/></svg></span>
+    <div>
+      <h2>Sign in</h2>
+      <p>Enter the upload password to send files through this relay.</p>
+    </div>
+    <label class="field" id="pwfield">
+      <input id="pw" type="password" placeholder=" " autocomplete="current-password" required aria-describedby="lerr">
+      <span class="label">Password</span>
+      <button type="button" class="btn icon-btn" id="pwshow" aria-label="Show password" aria-pressed="false"><svg class="i"><use href="#i-eye"/></svg></button>
+      <span class="support" id="lerr"></span>
+    </label>
+    <div class="actions"><button class="btn filled" id="lbtn">Sign in</button></div>
+  </form>
+
+  <div id="main" class="stack" hidden>
+    <div id="drop" class="drop">
+      <span class="badge"><svg class="i"><use href="#i-cloud"/></svg></span>
+      <h2>Drop files or folders here</h2>
+      <p>They are staged on the relay and fetched by the puller at the destination.</p>
+      <div class="row">
+        <button type="button" class="btn tonal" id="pickbtn"><svg class="i"><use href="#i-file"/></svg>Choose files</button>
+        <button type="button" class="btn outlined" id="pickdirbtn"><svg class="i"><use href="#i-folder"/></svg>Choose folder</button>
+      </div>
+      <input id="pick" type="file" multiple hidden>
+      <input id="pickdir" type="file" webkitdirectory hidden>
+    </div>
+
+    <div class="meter" id="space" hidden>
+      <div class="top"><svg class="i"><use href="#i-storage"/></svg><span>Staging area</span><span id="spacetext"></span></div>
+      <div class="bar" id="spacebar"><i></i></div>
+    </div>
+
+    <section class="section">
+      <h2 id="listhead">Transfers</h2>
+      <div class="list" id="list" aria-labelledby="listhead"></div>
+    </section>
+  </div>
+</main>
+
 <script>
 const PARALLEL = 4, RETRIES = 8;
 const $ = id => document.getElementById(id);
@@ -47,13 +279,31 @@ async function api(path, opts) {
   return r;
 }
 
-function showLogin() { $('login').style.display = 'block'; $('main').hidden = true; }
+function showLogin() { $('login').hidden = false; $('main').hidden = true; $('pw').focus(); }
+
+function loginError(msg) {
+  $('lerr').textContent = msg;
+  $('pwfield').classList.toggle('error', !!msg);
+}
+
+$('pwshow').onclick = () => {
+  const show = $('pw').type === 'password';
+  $('pw').type = show ? 'text' : 'password';
+  $('pwshow').setAttribute('aria-pressed', show);
+  $('pwshow').setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  $('pwshow').querySelector('use').setAttribute('href', show ? '#i-eye-off' : '#i-eye');
+};
+$('pw').oninput = () => loginError('');
 
 $('login').onsubmit = async e => {
   e.preventDefault();
-  const r = await fetch('/api/login', { method: 'POST', body: JSON.stringify({ Password: $('pw').value }) });
-  if (r.ok) { $('login').style.display = 'none'; $('main').hidden = false; $('lerr').textContent = ''; poll(); }
-  else $('lerr').textContent = await r.text();
+  $('lbtn').disabled = true;
+  try {
+    const r = await fetch('/api/login', { method: 'POST', body: JSON.stringify({ Password: $('pw').value }) });
+    if (r.ok) { $('login').hidden = true; $('main').hidden = false; $('pw').value = ''; loginError(''); poll(); }
+    else loginError((await r.text()).trim());
+  } catch (err) { loginError('Cannot reach the relay: ' + err.message); }
+  $('lbtn').disabled = false;
 };
 
 // Collect files from a drop, descending into folders.
@@ -77,10 +327,13 @@ async function entriesToFiles(items) {
   return out;
 }
 
-$('drop').onclick = () => $('pick').click();
+$('drop').onclick = e => { if (!e.target.closest('button')) $('pick').click(); };
+$('pickbtn').onclick = () => $('pick').click();
+$('pickdirbtn').onclick = () => $('pickdir').click();
 $('pick').onchange = e => { enqueue([...e.target.files].map(f => ({ file: f, name: f.name }))); e.target.value = ''; };
+$('pickdir').onchange = e => { enqueue([...e.target.files].map(f => ({ file: f, name: f.webkitRelativePath || f.name }))); e.target.value = ''; };
 $('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
-$('drop').ondragleave = () => $('drop').classList.remove('over');
+$('drop').ondragleave = e => { if (!$('drop').contains(e.relatedTarget)) $('drop').classList.remove('over'); };
 $('drop').ondrop = async e => {
   e.preventDefault(); $('drop').classList.remove('over');
   enqueue(await entriesToFiles(e.dataTransfer.items));
@@ -91,10 +344,12 @@ function enqueue(items) {
   for (const it of items) {
     const key = `${it.name}|${it.file.size}|${it.file.lastModified}`;
     if (local.has(key)) continue;
+    local.delete(key + '#err');
     local.set(key, { ...it, key, sent: 0, state: 'queued' });
     queue.push(key);
   }
   if (!running) pump();
+  render(last);
 }
 
 async function pump() {
@@ -142,35 +397,92 @@ async function upload(t) {
     if (!c.ok) throw new Error(await c.text());
     t.state = 'sent';
   } catch (err) {
-    t.state = 'error'; t.error = err.message;
+    t.state = 'error'; t.error = err.message.trim();
     local.delete(t.key); // allow retry/resume by dropping the file again
     local.set(t.key + '#err', t);
   }
 }
 
-function row(name, size, pct, meta, cls, err) {
-  return `<div class="row"><div class="top"><span class="name" title="${name}">${name}</span><span class="meta">${meta}</span></div>` +
-    `<div class="bar ${cls}"><i style="width:${pct}%"></i></div>${err ? `<div class="err">${err}</div>` : ''}</div>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pctText = p => p == null ? '' : Math.floor(p * 100) + '%';
+
+// Rows are kept by key and updated in place, so progress bars move smoothly between polls.
+const rows = new Map();
+function item(v) {
+  let el = rows.get(v.key);
+  if (!el) {
+    el = document.createElement('div');
+    el.innerHTML = '<span class="av"><svg class="i"><use/></svg></span><span class="name"></span><span class="pct"></span>' +
+      '<div class="sub"><span class="msg"></span><div class="bar" role="progressbar"><i></i></div></div>';
+    rows.set(v.key, el);
+  }
+  el.className = 'item ' + v.cls;
+  el.querySelector('.av').className = 'av s-' + v.icon[1];
+  el.querySelector('use').setAttribute('href', '#i-' + v.icon[0]);
+  const name = el.querySelector('.name');
+  if (name.textContent !== v.name) { name.textContent = v.name; name.title = v.name; }
+  el.querySelector('.pct').textContent = pctText(v.p);
+  el.querySelector('.msg').textContent = v.msg;
+  const bar = el.querySelector('.bar');
+  bar.className = 'bar ' + (v.bar || '') + (v.p == null ? ' indet' : '');
+  bar.setAttribute('aria-label', v.name);
+  if (v.p == null) { bar.style.removeProperty('--p'); bar.removeAttribute('aria-valuenow'); }
+  else { bar.style.setProperty('--p', Math.min(1, v.p)); bar.setAttribute('aria-valuenow', Math.round(v.p * 100)); }
+  return el;
+}
+
+const seen = new Map(); // server upload id -> {received, at}: tells a live upload from an abandoned one
+function views(s) {
+  const out = [], active = new Set();
+  for (const t of local.values()) {
+    if (t.state === 'sent') continue; // shown from server state below
+    active.add(t.name);
+    const size = t.file.size, p = size ? t.sent / size : 1;
+    if (t.state === 'queued') out.push({ key: t.key, name: t.name, icon: ['more', 'idle'], cls: '', p: 0, msg: `Queued · ${fmt(size)}` });
+    else if (t.state === 'error') out.push({ key: t.key, name: t.name, icon: ['error', 'err'], cls: 'error', bar: 'err', p,
+      msg: `${t.error || 'Upload failed'}. Drop the file again to resume from ${fmt(t.sent)}.` });
+    else out.push({ key: t.key, name: t.name, icon: ['up', 'up'], cls: '', p,
+      msg: `Uploading · ${fmt(t.sent)} of ${fmt(size)}${t.speed ? ` · ${fmt(t.speed)}/s` : ''}` });
+  }
+  if (!s) return out;
+  const now = Date.now();
+  for (const u of s.uploads) {
+    const prev = seen.get(u.id);
+    if (!prev || prev.received !== u.received) seen.set(u.id, { received: u.received, at: prev ? now : 0 });
+    if (active.has(u.name)) continue;
+    if (u.received >= u.size) { out.push({ key: 'u:' + u.id, name: u.name, icon: ['hourglass', 'check'], cls: '', p: null, msg: `Verifying checksum · ${fmt(u.size)}` }); continue; }
+    const p = u.size ? u.received / u.size : 0, live = now - seen.get(u.id).at < 10000;
+    out.push({ key: 'u:' + u.id, name: u.name, icon: live ? ['up', 'recv'] : ['pause', 'idle'], cls: '', p,
+      msg: live ? `Receiving from another client · ${fmt(u.received)} of ${fmt(u.size)}`
+        : `Incomplete · ${fmt(u.received)} of ${fmt(u.size)} · drop the same file to resume` });
+  }
+  for (const f of s.staged) {
+    const key = 's:' + f.name;
+    if (!f.sha256) out.push({ key, name: f.name, icon: ['hourglass', 'check'], cls: '', p: null, msg: `Verifying checksum · ${fmt(f.size)}` });
+    else if (f.pulled) out.push({ key, name: f.name, icon: ['down', 'nas'], cls: '', bar: 'nas', p: f.size ? f.pulled / f.size : 1,
+      msg: `To destination · ${fmt(f.pulled)} of ${fmt(f.size)}` });
+    else out.push({ key, name: f.name, icon: ['clock', 'wait'], cls: '', bar: 'nas', p: 0, msg: `Waiting for the puller · ${fmt(f.size)}` });
+  }
+  return out;
 }
 
 function render(s) {
-  let html = '';
-  for (const t of local.values()) {
-    if (t.state === 'sent') continue; // shown from server state below
-    const pct = t.file.size ? t.sent / t.file.size * 100 : 100;
-    const sp = t.speed ? ` · ${fmt(t.speed)}/s` : '';
-    html += row(esc(t.name), t.file.size, pct, `${t.state}: ${fmt(t.sent)} / ${fmt(t.file.size)}${sp}`, '', esc(t.error || ''));
+  const vs = views(s), list = $('list'), keep = new Set(vs.map(v => v.key));
+  for (const [k, el] of rows) if (!keep.has(k)) { el.remove(); rows.delete(k); }
+  if (!vs.length) {
+    if (!list.querySelector('.empty')) list.innerHTML = '<div class="empty"><svg class="i"><use href="#i-inbox"/></svg>Nothing staged right now.</div>';
+  } else {
+    list.querySelector('.empty')?.remove();
+    vs.forEach((v, i) => { const el = item(v); if (list.children[i] !== el) list.insertBefore(el, list.children[i] || null); });
   }
-  if (s) for (const f of s.staged) {
-    const hashing = !f.sha256;
-    const pct = hashing ? 100 : f.size ? f.pulled / f.size * 100 : 0;
-    const meta = hashing ? 'verifying…' : f.pulled ? `to NAS: ${fmt(f.pulled)} / ${fmt(f.size)}` : `waiting for NAS · ${fmt(f.size)}`;
-    html += row(esc(f.name), f.size, pct, meta, 'pull');
+  $('listhead').textContent = vs.length ? `Transfers · ${vs.length}` : 'Transfers';
+  if (s) {
+    $('space').hidden = false;
+    $('spacetext').textContent = s.quota ? `${fmt(s.used)} of ${fmt(s.quota)}` : `${fmt(s.used)} used`;
+    $('spacebar').hidden = !s.quota;
+    if (s.quota) $('spacebar').style.setProperty('--p', Math.min(1, s.used / s.quota));
   }
-  $('list').innerHTML = html || '<p class="meta">Nothing staged.</p>';
-  if (s) $('space').textContent = `Staging area: ${fmt(s.used)}${s.quota ? ' of ' + fmt(s.quota) : ''}`;
 }
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let last = null;
 async function poll() {

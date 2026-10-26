@@ -15,7 +15,7 @@ Private details of the author's own deployment live in `CLAUDE.local.md` (gitign
 | `store.go` | staging area on disk: uploads (`tmp/<id>.part` + `.json` bitmap), staged files (`inbox/`), quota, sweep |
 | `pull.go` | puller: list, per-file state, parallel Range segments, sha256 verify, no-clobber placement, confirm/delete |
 | `push.go` | CLI uploader over the browser chunk API; same upload key as the page (name, size, mtime in ms) so both resume each other |
-| `web/index.html` | the whole UI (embedded with `go:embed`): login, drag and drop, chunk upload, progress |
+| `web/index.html` | the whole UI (embedded with `go:embed`): login, drag and drop, chunk upload, progress. Styled after petal-elements (Material 3 Expressive): its sys tokens are copied inline, no external fonts or scripts |
 | `relay_test.go` | end to end tests (httptest server + real puller) |
 
 ## API (all JSON unless noted)
