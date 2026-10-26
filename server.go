@@ -41,10 +41,16 @@ type server struct {
 }
 
 func runServe(ctx context.Context) error {
-	password := os.Getenv("RELAYPORT_UPLOAD_PASSWORD")
-	pullToken := os.Getenv("RELAYPORT_PULL_TOKEN")
-	if password == "" || pullToken == "" {
-		return errors.New("RELAYPORT_UPLOAD_PASSWORD and RELAYPORT_PULL_TOKEN must be set")
+	password, err := requireSecret("RELAYPORT_UPLOAD_PASSWORD")
+	if err != nil {
+		return err
+	}
+	pullToken, err := requireSecret("RELAYPORT_PULL_TOKEN")
+	if err != nil {
+		return err
+	}
+	if len(pullToken) < 16 {
+		log.Print("warning: RELAYPORT_PULL_TOKEN is short; use a long random value (openssl rand -hex 32)")
 	}
 	quota, err := parseSize(envOr("RELAYPORT_QUOTA", "0"))
 	if err != nil {

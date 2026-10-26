@@ -1,13 +1,14 @@
 # Run this on the destination (e.g. a NAS). It only makes outbound connections.
+# Put RELAYPORT_PULL_TOKEN in a .env file next to this one, then: docker compose -f compose.puller.yaml up -d
 services:
   relayport-puller:
-    image: relayport:latest
+    image: ghcr.io/saki340/relayport:0.1
     command: ["pull"]
     restart: unless-stopped
     user: "1000:1000"          # your own uid:gid (see `id`), so pulled files are not owned by root
     environment:
       RELAYPORT_SERVER: https://relay.example.com
-      RELAYPORT_PULL_TOKEN: change-me-long-random-token
+      RELAYPORT_PULL_TOKEN: ${RELAYPORT_PULL_TOKEN:?set it in .env}
       RELAYPORT_PARALLEL: "4"           # concurrent segment downloads
       RELAYPORT_FILES: "2"              # files in flight at once
       RELAYPORT_SEGMENT: 16MiB

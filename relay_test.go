@@ -216,6 +216,92 @@ func TestPullNeverOverwritesLocalFile(t *testing.T) {
 	}
 }
 
+func TestPushFoldersAndResume(t *testing.T) {
+	s, ts := newTestServer(t, 0)
+	src := t.TempDir()
+	big := make([]byte, 9<<20+7) // 2 chunks
+	rand.Read(big)
+	files := map[string][]byte{
+		"photos/a.bin":      big,
+		"photos/sub/b.txt":  []byte("hello"),
+		"photos/.hidden":    []byte("skip me"),
+		"photos/.git/x":     []byte("skip me too"),
+		"photos/empty.txt":  {},
+		"loose/c.txt":       []byte("loose file"),
+		"loose/ignored.txt": []byte("not pushed"),
+	}
+	for name, data := range files {
+		p := filepath.Join(src, filepath.FromSlash(name))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, data, 0o644)
+	}
+
+	items, err := collectPush([]string{filepath.Join(src, "photos"), filepath.Join(src, "loose", "c.txt")}, "in")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"in/photos/a.bin": "photos/a.bin", "in/photos/sub/b.txt": "photos/sub/b.txt",
+		"in/photos/empty.txt": "photos/empty.txt", "in/c.txt": "loose/c.txt"}
+	if len(items) != len(want) {
+		t.Fatalf("collected %v, want %v", items, want)
+	}
+
+	// Pretend an earlier push of a.bin was interrupted after chunk 0.
+	for _, it := range items {
+		if it.name == "in/photos/a.bin" {
+			u, err := s.store.Create(pushKey(it.name, it.size, it.mod), it.name, it.size)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := s.store.WriteChunk(u.ID, 0, bytes.NewReader(big[:u.ChunkSize]), ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	p := newPusher(ts.URL, "pw", 2)
+	if err := p.login(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if err := p.pushOne(context.Background(), it); err != nil {
+			t.Fatalf("push %s: %v", it.name, err)
+		}
+	}
+	for name, from := range want {
+		got, err := os.ReadFile(filepath.Join(s.store.inboxDir(), filepath.FromSlash(name)))
+		if err != nil || !bytes.Equal(got, files[from]) {
+			t.Errorf("%s: content differs (%v)", name, err)
+		}
+	}
+	if n := len(s.store.Snapshot().Staged); n != len(want) {
+		t.Errorf("staged %d files, want %d", n, len(want))
+	}
+
+	// Pushing a file that is already staged is refused, not duplicated.
+	if err := p.pushOne(context.Background(), items[0]); err == nil {
+		t.Error("second push of a staged file must fail")
+	}
+	if err := newPusher(ts.URL, "wrong", 1).login(context.Background()); err == nil {
+		t.Error("login with a wrong password must fail")
+	}
+}
+
+func TestPlaceholderSecretsRefused(t *testing.T) {
+	t.Setenv("RELAYPORT_PULL_TOKEN", "change-me-long-random-token")
+	if _, err := requireSecret("RELAYPORT_PULL_TOKEN"); err == nil {
+		t.Error("placeholder token accepted")
+	}
+	t.Setenv("RELAYPORT_PULL_TOKEN", "")
+	if _, err := requireSecret("RELAYPORT_PULL_TOKEN"); err == nil {
+		t.Error("empty token accepted")
+	}
+	t.Setenv("RELAYPORT_PULL_TOKEN", "3f9a0c1e8b7d6a5f4e3d2c1b0a9f8e7d")
+	if v, err := requireSecret("RELAYPORT_PULL_TOKEN"); err != nil || v == "" {
+		t.Errorf("real token refused: %v", err)
+	}
+}
+
 func TestAuthQuotaAndNames(t *testing.T) {
 	_, ts := newTestServer(t, 1<<20)
 	if r, _ := http.Get(ts.URL + "/api/state"); r.StatusCode != 401 {

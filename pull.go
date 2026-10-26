@@ -48,9 +48,12 @@ type pullState struct {
 
 func runPull(ctx context.Context) error {
 	server := strings.TrimRight(os.Getenv("RELAYPORT_SERVER"), "/")
-	token := os.Getenv("RELAYPORT_PULL_TOKEN")
-	if server == "" || token == "" {
-		return errors.New("RELAYPORT_SERVER and RELAYPORT_PULL_TOKEN must be set")
+	if server == "" {
+		return errors.New("RELAYPORT_SERVER must be set")
+	}
+	token, err := requireSecret("RELAYPORT_PULL_TOKEN")
+	if err != nil {
+		return err
 	}
 	seg, err := parseSize(envOr("RELAYPORT_SEGMENT", "16MiB"))
 	if err != nil || seg <= 0 {
