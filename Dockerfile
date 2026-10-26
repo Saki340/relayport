@@ -3,12 +3,12 @@ WORKDIR /src
 COPY go.mod ./
 COPY *.go ./
 COPY web ./web
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /inbox-relay .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /relayport .
 
 FROM scratch
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=build /inbox-relay /inbox-relay
-ENV IR_DATA=/data IR_DEST=/inbox
+COPY --from=build /relayport /relayport
+ENV RELAYPORT_DATA=/data RELAYPORT_DEST=/inbox
 EXPOSE 8080
-ENTRYPOINT ["/inbox-relay"]
+ENTRYPOINT ["/relayport"]
 CMD ["serve"]

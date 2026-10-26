@@ -46,28 +46,28 @@ type pullState struct {
 }
 
 func runPull(ctx context.Context) error {
-	server := strings.TrimRight(os.Getenv("IR_SERVER"), "/")
-	token := os.Getenv("IR_PULL_TOKEN")
+	server := strings.TrimRight(os.Getenv("RELAYPORT_SERVER"), "/")
+	token := os.Getenv("RELAYPORT_PULL_TOKEN")
 	if server == "" || token == "" {
-		return errors.New("IR_SERVER and IR_PULL_TOKEN must be set")
+		return errors.New("RELAYPORT_SERVER and RELAYPORT_PULL_TOKEN must be set")
 	}
-	seg, err := parseSize(envOr("IR_SEGMENT", "16MiB"))
+	seg, err := parseSize(envOr("RELAYPORT_SEGMENT", "16MiB"))
 	if err != nil || seg <= 0 {
-		return fmt.Errorf("IR_SEGMENT: invalid")
+		return fmt.Errorf("RELAYPORT_SEGMENT: invalid")
 	}
-	par, err := strconv.Atoi(envOr("IR_PARALLEL", "4"))
+	par, err := strconv.Atoi(envOr("RELAYPORT_PARALLEL", "4"))
 	if err != nil || par < 1 {
-		return fmt.Errorf("IR_PARALLEL: invalid")
+		return fmt.Errorf("RELAYPORT_PARALLEL: invalid")
 	}
-	files, err := strconv.Atoi(envOr("IR_FILES", "2"))
+	files, err := strconv.Atoi(envOr("RELAYPORT_FILES", "2"))
 	if err != nil || files < 1 {
-		return fmt.Errorf("IR_FILES: invalid")
+		return fmt.Errorf("RELAYPORT_FILES: invalid")
 	}
-	poll, err := time.ParseDuration(envOr("IR_POLL", "15s"))
+	poll, err := time.ParseDuration(envOr("RELAYPORT_POLL", "15s"))
 	if err != nil {
-		return fmt.Errorf("IR_POLL: %w", err)
+		return fmt.Errorf("RELAYPORT_POLL: %w", err)
 	}
-	dest := envOr("IR_DEST", "./inbox")
+	dest := envOr("RELAYPORT_DEST", "./inbox")
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func runPull(ctx context.Context) error {
 		}},
 		active: map[string]bool{},
 	}
-	log.Printf("pulling from %s into %s (%d segments of %s, %d files at a time)", server, dest, par, envOr("IR_SEGMENT", "16MiB"), files)
+	log.Printf("pulling from %s into %s (%d segments of %s, %d files at a time)", server, dest, par, envOr("RELAYPORT_SEGMENT", "16MiB"), files)
 
 	fileSlots := make(chan struct{}, files)
 	var wg sync.WaitGroup

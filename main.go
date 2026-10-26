@@ -1,7 +1,7 @@
-// inbox-relay: a store-and-forward file relay for unreliable links.
+// relayport: a store-and-forward file relay for unreliable links.
 //
-//	inbox-relay serve   run on the relay host: web upload page + staging area + pull API
-//	inbox-relay pull    run on the destination: pulls staged files in parallel segments
+//	relayport serve   run on the relay host: web upload page + staging area + pull API
+//	relayport pull    run on the destination: pulls staged files in parallel segments
 package main
 
 import (
@@ -30,17 +30,17 @@ func main() {
 		usage()
 	}
 	if err != nil && ctx.Err() == nil {
-		log.Fatalf("inbox-relay %s: %v", os.Args[1], err)
+		log.Fatalf("relayport %s: %v", os.Args[1], err)
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, `usage: inbox-relay <serve|pull>
+	fmt.Fprintln(os.Stderr, `usage: relayport <serve|pull>
 
-serve  (env) IR_LISTEN=:8080 IR_DATA=/data IR_UPLOAD_PASSWORD=... IR_PULL_TOKEN=...
-             IR_QUOTA=50GiB IR_STALE_TTL=48h IR_SECRET=... (optional, cookie signing key)
-pull   (env) IR_SERVER=https://relay.example.com IR_PULL_TOKEN=... IR_DEST=/data/inbox
-             IR_PARALLEL=4 IR_SEGMENT=16MiB IR_POLL=15s`)
+serve  (env) RELAYPORT_LISTEN=:8080 RELAYPORT_DATA=/data RELAYPORT_UPLOAD_PASSWORD=... RELAYPORT_PULL_TOKEN=...
+             RELAYPORT_QUOTA=50GiB RELAYPORT_STALE_TTL=48h RELAYPORT_SECRET=... (optional, cookie signing key)
+pull   (env) RELAYPORT_SERVER=https://relay.example.com RELAYPORT_PULL_TOKEN=... RELAYPORT_DEST=/data/inbox
+             RELAYPORT_PARALLEL=4 RELAYPORT_SEGMENT=16MiB RELAYPORT_POLL=15s`)
 	os.Exit(2)
 }
 

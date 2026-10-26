@@ -1,3 +1,3 @@
-module github.com/Saki340/inbox-relay
+module github.com/Saki340/relayport
 
 go 1.24

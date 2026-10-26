@@ -41,30 +41,30 @@ type server struct {
 }
 
 func runServe(ctx context.Context) error {
-	password := os.Getenv("IR_UPLOAD_PASSWORD")
-	pullToken := os.Getenv("IR_PULL_TOKEN")
+	password := os.Getenv("RELAYPORT_UPLOAD_PASSWORD")
+	pullToken := os.Getenv("RELAYPORT_PULL_TOKEN")
 	if password == "" || pullToken == "" {
-		return errors.New("IR_UPLOAD_PASSWORD and IR_PULL_TOKEN must be set")
+		return errors.New("RELAYPORT_UPLOAD_PASSWORD and RELAYPORT_PULL_TOKEN must be set")
 	}
-	quota, err := parseSize(envOr("IR_QUOTA", "0"))
+	quota, err := parseSize(envOr("RELAYPORT_QUOTA", "0"))
 	if err != nil {
-		return fmt.Errorf("IR_QUOTA: %w", err)
+		return fmt.Errorf("RELAYPORT_QUOTA: %w", err)
 	}
-	ttl, err := time.ParseDuration(envOr("IR_STALE_TTL", "48h"))
+	ttl, err := time.ParseDuration(envOr("RELAYPORT_STALE_TTL", "48h"))
 	if err != nil {
-		return fmt.Errorf("IR_STALE_TTL: %w", err)
+		return fmt.Errorf("RELAYPORT_STALE_TTL: %w", err)
 	}
-	store, err := NewStore(envOr("IR_DATA", "./data"), quota)
+	store, err := NewStore(envOr("RELAYPORT_DATA", "./data"), quota)
 	if err != nil {
 		return err
 	}
-	secret := envOr("IR_SECRET", password+"/inbox-relay/session")
+	secret := envOr("RELAYPORT_SECRET", password+"/relayport/session")
 	s := &server{
 		store:      store,
 		password:   password,
 		pullToken:  pullToken,
 		key:        []byte(secret),
-		trustProxy: os.Getenv("IR_TRUST_PROXY") == "1",
+		trustProxy: os.Getenv("RELAYPORT_TRUST_PROXY") == "1",
 		failures:   map[string][]time.Time{},
 	}
 
@@ -80,7 +80,7 @@ func runServe(ctx context.Context) error {
 	}()
 
 	srv := &http.Server{
-		Addr:              envOr("IR_LISTEN", ":8080"),
+		Addr:              envOr("RELAYPORT_LISTEN", ":8080"),
 		Handler:           s.routes(),
 		ReadHeaderTimeout: 15 * time.Second,
 		IdleTimeout:       2 * time.Minute,
@@ -91,7 +91,7 @@ func runServe(ctx context.Context) error {
 		defer cancel()
 		srv.Shutdown(sh)
 	}()
-	log.Printf("serving on %s, data in %s, quota %s", srv.Addr, envOr("IR_DATA", "./data"), envOr("IR_QUOTA", "0"))
+	log.Printf("serving on %s, data in %s, quota %s", srv.Addr, envOr("RELAYPORT_DATA", "./data"), envOr("RELAYPORT_QUOTA", "0"))
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		return err
 	}
@@ -186,7 +186,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: "ir_session", Value: s.sign(time.Now().Add(sessionTTL).Unix()),
+		Name: "relayport_session", Value: s.sign(time.Now().Add(sessionTTL).Unix()),
 		Path: "/", MaxAge: int(sessionTTL.Seconds()), HttpOnly: true,
 		SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
 	})
@@ -195,7 +195,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) session(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie("ir_session")
+		c, err := r.Cookie("relayport_session")
 		if err != nil || !s.validCookie(c.Value) {
 			http.Error(w, "login required", http.StatusUnauthorized)
 			return

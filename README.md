@@ -1,4 +1,4 @@
-# inbox-relay
+# relayport
 
 [中文](#中文)
 
@@ -32,7 +32,7 @@ browser ──HTTPS──▶ relay (VPS) ◀──HTTPS── puller (home / NAS
 Build the image once (or `go build` for a plain binary):
 
 ```sh
-docker build -t inbox-relay .
+docker build -t relayport .
 ```
 
 **On the relay host** (`compose.relay.yaml`): set a password and a pull token, then
@@ -44,37 +44,37 @@ relay.example.com {
 }
 ```
 
-**At the destination** (`compose.puller.yaml`): set `IR_SERVER` and the same pull token, mount the
+**At the destination** (`compose.puller.yaml`): set `RELAYPORT_SERVER` and the same pull token, mount the
 folder to fill, then `docker compose -f compose.puller.yaml up -d`.
 
 Open `https://relay.example.com`, sign in, and drop files.
 
 ## Configuration
 
-`inbox-relay serve`
+`relayport serve`
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `IR_LISTEN` | `:8080` | listen address |
-| `IR_DATA` | `./data` | staging directory (`inbox/` + `tmp/`) |
-| `IR_UPLOAD_PASSWORD` | required | password for the web page |
-| `IR_PULL_TOKEN` | required | bearer token for the puller |
-| `IR_QUOTA` | unlimited | max staged + in-flight bytes, e.g. `50GiB` |
-| `IR_STALE_TTL` | `48h` | drop unfinished uploads idle this long |
-| `IR_TRUST_PROXY` | off | `1` = take client IP from `X-Forwarded-For` (only behind your proxy) |
-| `IR_SECRET` | derived from password | cookie signing key |
+| `RELAYPORT_LISTEN` | `:8080` | listen address |
+| `RELAYPORT_DATA` | `./data` | staging directory (`inbox/` + `tmp/`) |
+| `RELAYPORT_UPLOAD_PASSWORD` | required | password for the web page |
+| `RELAYPORT_PULL_TOKEN` | required | bearer token for the puller |
+| `RELAYPORT_QUOTA` | unlimited | max staged + in-flight bytes, e.g. `50GiB` |
+| `RELAYPORT_STALE_TTL` | `48h` | drop unfinished uploads idle this long |
+| `RELAYPORT_TRUST_PROXY` | off | `1` = take client IP from `X-Forwarded-For` (only behind your proxy) |
+| `RELAYPORT_SECRET` | derived from password | cookie signing key |
 
-`inbox-relay pull`
+`relayport pull`
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `IR_SERVER` | required | relay base URL |
-| `IR_PULL_TOKEN` | required | same token as the relay |
-| `IR_DEST` | `./inbox` | where finished files go (partial files are dot-prefixed) |
-| `IR_PARALLEL` | `4` | concurrent segment downloads |
-| `IR_FILES` | `2` | files in flight at once |
-| `IR_SEGMENT` | `16MiB` | segment size |
-| `IR_POLL` | `15s` | how often to look for new files |
+| `RELAYPORT_SERVER` | required | relay base URL |
+| `RELAYPORT_PULL_TOKEN` | required | same token as the relay |
+| `RELAYPORT_DEST` | `./inbox` | where finished files go (partial files are dot-prefixed) |
+| `RELAYPORT_PARALLEL` | `4` | concurrent segment downloads |
+| `RELAYPORT_FILES` | `2` | files in flight at once |
+| `RELAYPORT_SEGMENT` | `16MiB` | segment size |
+| `RELAYPORT_POLL` | `15s` | how often to look for new files |
 
 ## Notes
 
@@ -100,5 +100,5 @@ MIT licensed.
 - 安全:上传口令(登录失败限速)+ 独立的拉取令牌;暂存配额;自动清理废弃上传;拒绝路径穿越和隐藏文件名。
 - 家里只需要出站连接,不用开放端口。
 
-使用:`docker build -t inbox-relay .`,中转机用 `compose.relay.yaml`(前面加 Caddy/nginx 做 HTTPS),
+使用:`docker build -t relayport .`,中转机用 `compose.relay.yaml`(前面加 Caddy/nginx 做 HTTPS),
 家里用 `compose.puller.yaml`,配置项见上表。

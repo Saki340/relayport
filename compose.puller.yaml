@@ -1,14 +1,14 @@
 # Run this on the destination (e.g. a NAS). It only makes outbound connections.
 services:
-  inbox-puller:
-    image: inbox-relay:latest
+  relayport-puller:
+    image: relayport:latest
     command: ["pull"]
     restart: unless-stopped
     environment:
-      IR_SERVER: https://relay.example.com
-      IR_PULL_TOKEN: change-me-long-random-token
-      IR_PARALLEL: "4"           # concurrent segment downloads
-      IR_FILES: "2"              # files in flight at once
-      IR_SEGMENT: 16MiB
+      RELAYPORT_SERVER: https://relay.example.com
+      RELAYPORT_PULL_TOKEN: change-me-long-random-token
+      RELAYPORT_PARALLEL: "4"           # concurrent segment downloads
+      RELAYPORT_FILES: "2"              # files in flight at once
+      RELAYPORT_SEGMENT: 16MiB
     volumes:
       - /path/to/inbox:/inbox
