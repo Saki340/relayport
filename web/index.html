@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>inbox-relay</title>
+<style>
+  :root { color-scheme: light dark; --fg:#1d1d1f; --bg:#fff; --mut:#6b7280; --line:#e5e7eb; --acc:#2563eb; --ok:#16a34a; --bad:#dc2626; }
+  @media (prefers-color-scheme: dark) { :root { --fg:#e5e7eb; --bg:#111827; --mut:#9ca3af; --line:#374151; --acc:#60a5fa; --ok:#4ade80; --bad:#f87171; } }
+  body { font: 15px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.2rem; }
+  #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 2rem; text-align: center; color: var(--mut); cursor: pointer; }
+  #drop.over { border-color: var(--acc); color: var(--acc); }
+  .row { padding: .6rem 0; border-bottom: 1px solid var(--line); }
+  .top { display: flex; justify-content: space-between; gap: 1rem; }
+  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { color: var(--mut); font-size: 13px; white-space: nowrap; }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--acc); width: 0; transition: width .3s; }
+  .bar.pull > i { background: var(--ok); }
+  .err { color: var(--bad); font-size: 13px; }
+  input, button { font: inherit; padding: .4rem .7rem; }
+  #login { display: none; }
+</style>
+</head>
+<body>
+<h1>inbox-relay</h1>
+<form id="login">
+  <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+  <button>Sign in</button> <span id="lerr" class="err"></span>
+</form>
+<div id="main" hidden>
+  <div id="drop">Drop files or folders here, or click to choose files<input id="pick" type="file" multiple hidden></div>
+  <p class="meta" id="space"></p>
+  <div id="list"></div>
+</div>
+<script>
+const PARALLEL = 4, RETRIES = 8;
+const $ = id => document.getElementById(id);
+const fmt = n => { const u = ['B','KiB','MiB','GiB','TiB']; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return n.toFixed(i ? 1 : 0) + ' ' + u[i]; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const local = new Map(); // key -> {name,size,sent,speed,error,state}
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (r.status === 401) { showLogin(); throw new Error('login required'); }
+  return r;
+}
+
+function showLogin() { $('login').style.display = 'block'; $('main').hidden = true; }
+
+$('login').onsubmit = async e => {
+  e.preventDefault();
+  const r = await fetch('/api/login', { method: 'POST', body: JSON.stringify({ Password: $('pw').value }) });
+  if (r.ok) { $('login').style.display = 'none'; $('main').hidden = false; $('lerr').textContent = ''; poll(); }
+  else $('lerr').textContent = await r.text();
+};
+
+// Collect files from a drop, descending into folders.
+async function entriesToFiles(items) {
+  const out = [];
+  const walk = async (entry, prefix) => {
+    if (entry.isFile) {
+      const file = await new Promise(r => entry.file(r));
+      out.push({ file, name: prefix + entry.name });
+    } else {
+      const reader = entry.createReader();
+      for (;;) {
+        const batch = await new Promise(r => reader.readEntries(r));
+        if (!batch.length) break;
+        for (const e of batch) await walk(e, prefix + entry.name + '/');
+      }
+    }
+  };
+  const roots = [...items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  for (const e of roots) await walk(e, '');
+  return out;
+}
+
+$('drop').onclick = () => $('pick').click();
+$('pick').onchange = e => { enqueue([...e.target.files].map(f => ({ file: f, name: f.name }))); e.target.value = ''; };
+$('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
+$('drop').ondragleave = () => $('drop').classList.remove('over');
+$('drop').ondrop = async e => {
+  e.preventDefault(); $('drop').classList.remove('over');
+  enqueue(await entriesToFiles(e.dataTransfer.items));
+};
+
+const queue = []; let running = false;
+function enqueue(items) {
+  for (const it of items) {
+    const key = `${it.name}|${it.file.size}|${it.file.lastModified}`;
+    if (local.has(key)) continue;
+    local.set(key, { ...it, key, sent: 0, state: 'queued' });
+    queue.push(key);
+  }
+  if (!running) pump();
+}
+
+async function pump() {
+  running = true;
+  while (queue.length) await upload(local.get(queue.shift()));
+  running = false;
+}
+
+async function sha256hex(buf) {
+  if (!crypto.subtle) return '';
+  const d = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function upload(t) {
+  t.state = 'uploading'; t.error = '';
+  try {
+    const r = await api('/api/uploads', { method: 'POST', body: JSON.stringify({ Key: t.key, Name: t.name, Size: t.file.size }) });
+    if (!r.ok) throw new Error(await r.text());
+    const u = await r.json();
+    const todo = [];
+    u.done.forEach((d, i) => { if (d) t.sent += Math.min(u.chunkSize, t.file.size - i * u.chunkSize); else todo.push(i); });
+    const t0 = Date.now(); let base = t.sent;
+    const worker = async () => {
+      for (let i; (i = todo.shift()) !== undefined;) {
+        const blob = t.file.slice(i * u.chunkSize, (i + 1) * u.chunkSize);
+        const buf = await blob.arrayBuffer();
+        const hash = await sha256hex(buf);
+        for (let a = 0; ; a++) {
+          try {
+            const pr = await api(`/api/uploads/${u.id}/chunks/${i}`, { method: 'PUT', body: buf, headers: hash ? { 'X-Chunk-Sha256': hash } : {} });
+            if (!pr.ok) throw new Error(await pr.text());
+            break;
+          } catch (err) {
+            if (a >= RETRIES || err.message === 'login required') throw err;
+            await sleep(Math.min(1000 * 2 ** a, 20000));
+          }
+        }
+        t.sent += buf.byteLength;
+        t.speed = (t.sent - base) / ((Date.now() - t0) / 1000);
+      }
+    };
+    await Promise.all(Array.from({ length: PARALLEL }, worker));
+    const c = await api(`/api/uploads/${u.id}/complete`, { method: 'POST' });
+    if (!c.ok) throw new Error(await c.text());
+    t.state = 'sent';
+  } catch (err) {
+    t.state = 'error'; t.error = err.message;
+    local.delete(t.key); // allow retry/resume by dropping the file again
+    local.set(t.key + '#err', t);
+  }
+}
+
+function row(name, size, pct, meta, cls, err) {
+  return `<div class="row"><div class="top"><span class="name" title="${name}">${name}</span><span class="meta">${meta}</span></div>` +
+    `<div class="bar ${cls}"><i style="width:${pct}%"></i></div>${err ? `<div class="err">${err}</div>` : ''}</div>`;
+}
+
+function render(s) {
+  let html = '';
+  for (const t of local.values()) {
+    if (t.state === 'sent') continue; // shown from server state below
+    const pct = t.file.size ? t.sent / t.file.size * 100 : 100;
+    const sp = t.speed ? ` · ${fmt(t.speed)}/s` : '';
+    html += row(esc(t.name), t.file.size, pct, `${t.state}: ${fmt(t.sent)} / ${fmt(t.file.size)}${sp}`, '', esc(t.error || ''));
+  }
+  if (s) for (const f of s.staged) {
+    const hashing = !f.sha256;
+    const pct = hashing ? 100 : f.size ? f.pulled / f.size * 100 : 0;
+    const meta = hashing ? 'verifying…' : f.pulled ? `to NAS: ${fmt(f.pulled)} / ${fmt(f.size)}` : `waiting for NAS · ${fmt(f.size)}`;
+    html += row(esc(f.name), f.size, pct, meta, 'pull');
+  }
+  $('list').innerHTML = html || '<p class="meta">Nothing staged.</p>';
+  if (s) $('space').textContent = `Staging area: ${fmt(s.used)}${s.quota ? ' of ' + fmt(s.quota) : ''}`;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let last = null;
+async function poll() {
+  for (;;) {
+    try {
+      const r = await api('/api/state');
+      if (r.ok) last = await r.json();
+      $('main').hidden = false;
+    } catch (e) { if (e.message === 'login required') return; }
+    render(last);
+    await sleep(1500);
+  }
+}
+poll();
+</script>
+</body>
+</html>

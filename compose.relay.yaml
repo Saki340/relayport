@@ -1,0 +1,16 @@
+# Run this on the relay host (a VPS with good connectivity to your uploader).
+services:
+  inbox-relay:
+    image: inbox-relay:latest   # docker build -t inbox-relay .
+    command: ["serve"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"   # put a TLS reverse proxy (Caddy, nginx) in front
+    environment:
+      IR_UPLOAD_PASSWORD: change-me-upload-password
+      IR_PULL_TOKEN: change-me-long-random-token
+      IR_QUOTA: 50GiB            # refuse uploads beyond this much staged data
+      IR_STALE_TTL: 48h          # drop half-finished uploads untouched this long
+      IR_TRUST_PROXY: "1"        # read the client IP from X-Forwarded-For (only behind a proxy)
+    volumes:
+      - ./data:/data
